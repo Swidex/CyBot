@@ -1,9 +1,12 @@
 /**
- * main.c
+ * lab5_template.c
+ * 
+ * Template file for CprE 288 lab 5
  *
- * @author Benjamin Hall
- * @date 10/4/2021
+ * @author Zhao Zhang, Chad Nelson, Zachary Glanz
+ * @date 08/14/2016
  *
+ * @author Phillip Jones, updated 6/4/2019
  */
 
 #include "button.h"
@@ -11,18 +14,17 @@
 #include "lcd.h"
 #include "open_interface.h"
 #include "movement.h"
+
 #include "cyBot_uart.h"
 #include "cyBot_Scan.h"
-
-#define INFRONT_ANGLE = 110 // different for every CyBot
 
 // Defined in button.c : Used to communicate information between the
 // the interupt handeler and main.
 extern volatile int button_event;
 extern volatile int button_num;
+INFRONT_ANGLE = 110;
 
 void sendUartString( char msg[] ) {
-    // send string to UART
     int i = 0;
     while ( msg[i] != '\0' ){
         cyBot_sendByte(msg[i]);
@@ -38,91 +40,75 @@ int main(void) {
 	button_init();
 	lcd_init();
 	init_button_interrupts();
-
-    // initialize sensors
 	oi_t *sensor_data = oi_alloc();
     oi_init(sensor_data);
 
-	cyBot_uart_init_clean();  // clean UART initialization
+	cyBot_uart_init_clean();  // Clean UART initialization, before running your UART GPIO init code
 
-	// initialize GPIO for UART
+	// Complete this code for configuring the  (GPIO) part of UART initialization
     SYSCTL_RCGCGPIO_R |= 0b000010;
-    timer_waitMillis(1);    // Small delay before accessing device after turning on clock
+    timer_waitMillis(1);            // Small delay before accessing device after turning on clock
     GPIO_PORTB_AFSEL_R |= 0x03;
-    GPIO_PORTB_PCTL_R &= 0x0011;
-    GPIO_PORTB_PCTL_R |= 0x0011;
+    GPIO_PORTB_PCTL_R &= 0x0011;      // Force 0's in the desired locations
+    GPIO_PORTB_PCTL_R |= 0x0011;     // Force 1's in the desired locations
     GPIO_PORTB_DEN_R |= 0x03;
-    GPIO_PORTB_DIR_R &= 0x01;
-    GPIO_PORTB_DIR_R |= 0x01;
+    GPIO_PORTB_DIR_R &= 0x01;      // Force 0's in the desired locations
+    GPIO_PORTB_DIR_R |= 0x01;      // Force 1's in the desired locations
 
-    cyBot_uart_init_last_half(); // UART device initalization completion
+    cyBot_uart_init_last_half();  // Complete the UART device initialization part of configuration
 	
-    // initialize scan sensors
+    //Initialize scan sensors
     cyBOT_init_Scan();
     cyBOT_Scan_t scanData;
-
     char returnString[30];
 
     while(1)
     {
-        char cmd = cyBot_getByte();
-        switch ( cmd )
+        switch ( button_num )
         {
-        case 'w': //move forward
-            move(sensor_data, 10);
+        case 1:
+            lcd_clear();
+            lcd_puts("S1");
+            sendUartString("You pressed button 1!\n\r");
             break;
-        case 's': //move back
-            move(sensor_data, -10);
-            break;
-        case 'd': //turn right
-            turn(sensor_data, -12);
-            break;
-        case 'a': //turn left
-            turn(sensor_data, 12);
-            break;
-        case 'm': //scan
+        case 2:
             lcd_clear();
             int theta;
-            lcd_puts("Scanning");
-            sendUartString("Scanning\n");
             for (theta = 0; theta <= 180; theta += 2 ) {
                 cyBOT_Scan(theta, &scanData); // scan at theta degrees.
                 timer_waitMillis(100); // wait so it doesn't break
-                sprintf(returnString, "%d,%0.2f,%0.2f\n",theta,convertIRToDist(scanData.IR_raw_val),scanData.sound_dist);
+                sprintf(returnString, "%d,%0.2f\n",theta,(convertIRToDist(scanData.IR_raw_val) + scanData.sound_dist) / 2.0);
                 sendUartString(returnString);
             }
             sendUartString("Complete\n");
             break;
-        case 'c': // Calibrate IR sensor to real distances
+        case 3:
             lcd_clear();
-            lcd_puts("Calibrating");
-            sendUartString("Calibrating\n");
+            cyBOT_Scan(INFRONT_ANGLE, &scanData);
+            double calcDist = convertIRToDist(scanData.IR_raw_val);
+            sprintf(returnString, "%d %0.2f",scanData.IR_raw_val, (calcDist+scanData.sound_dist) / 2.0);
+            printf("%0.2f\t%02.f\n", calcDist, scanData.sound_dist);
+            lcd_puts(returnString);
+            break;
+        case 4:
+            lcd_clear();
+            lcd_puts("Calibrating...");
             float dist = 100.0;
-            while (dist > 10.0) // continue until distance is less than 10
+            while (dist > 10.0)
             {
-                // take scan directly infront of CyBot
                 cyBOT_Scan(INFRONT_ANGLE, &scanData);
                 dist = scanData.sound_dist;
-
-                if (dist > 100) { continue; } // skip if distance is greater due to scanner inaccuracies
-
                 sprintf(returnString, "%0.0f,%d\n", dist, scanData.IR_raw_val);
                 sendUartString(returnString);
-
-                // move forward for next scan
                 move(sensor_data,5);
-
-                if (button_num == 4) {
-                    // stop calibration if button 4 is pressed
+                if (button_num == 3) {
                     lcd_clear();
                     oi_setWheels(0,0);
                     lcd_puts("Calibration canceled.");
-                    timer_waitMillis(1000); // wait one second before taking input
                     break;
                 }
             }
             break;
         }
     }
-    oi_free(sensor_data);
 }
