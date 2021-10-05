@@ -74,6 +74,7 @@ int main(void) {
             // send back distance for accuracy
             sprintf(returnString,"%0.2f\n",dist);
             sendUartString(returnString);
+
             break;
         case 's': //move back
             double dist = move(sensor_data, -10);
@@ -81,6 +82,7 @@ int main(void) {
             // send back distance for accuracy
             sprintf(returnString,"%0.2f\n",dist);
             sendUartString(returnString);
+
             break;
         case 'd': //turn right
             double angle = turn(sensor_data, -12);
@@ -88,6 +90,7 @@ int main(void) {
             // send back angle for accuracy
             sprintf(returnString,"%d\n",angle);
             sendUartString(returnString);
+
             break;
         case 'a': //turn left
             double angle = turn(sensor_data, 12);
@@ -95,24 +98,26 @@ int main(void) {
             // send back angle for accuracy
             sprintf(returnString,"%d\n",angle);
             sendUartString(returnString);
+
             break;
         case 'm': //scan
             lcd_clear();
-            int theta;
             lcd_puts("Scanning");
-            sendUartString("Scanning\n");
+
+            int theta;
             for (theta = 0; theta <= 180; theta += 2 ) {
                 cyBOT_Scan(theta, &scanData); // scan at theta degrees.
                 timer_waitMillis(100); // wait so it doesn't break
                 sprintf(returnString, "%d,%0.2f,%0.2f\n",theta,convertIRToDist(scanData.IR_raw_val),scanData.sound_dist);
                 sendUartString(returnString);
             }
-            sendUartString("Complete\n");
+            sendUartString("Complete\n"); // tell uart we are done
+
             break;
         case 'c': // Calibrate IR sensor to real distances
             lcd_clear();
             lcd_puts("Calibrating");
-            sendUartString("Calibrating\n");
+
             float dist = 100.0;
             while (dist > 10.0) // continue until distance is less than 10
             {
@@ -137,6 +142,7 @@ int main(void) {
                     break;
                 }
             }
+            sendUartString("Complete\n") // tell uart we are done calibrating
             break;
         }
     }
