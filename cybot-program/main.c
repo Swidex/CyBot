@@ -69,16 +69,32 @@ int main(void) {
         switch ( cmd )
         {
         case 'w': //move forward
-            move(sensor_data, 10);
+            double dist = move(sensor_data, 10);
+
+            // send back distance for accuracy
+            sprintf(returnString,"%0.2f\n",dist);
+            sendUartString(returnString);
             break;
         case 's': //move back
-            move(sensor_data, -10);
+            double dist = move(sensor_data, -10);
+
+            // send back distance for accuracy
+            sprintf(returnString,"%0.2f\n",dist);
+            sendUartString(returnString);
             break;
         case 'd': //turn right
-            turn(sensor_data, -12);
+            double angle = turn(sensor_data, -12);
+
+            // send back angle for accuracy
+            sprintf(returnString,"%d\n",angle);
+            sendUartString(returnString);
             break;
         case 'a': //turn left
-            turn(sensor_data, 12);
+            double angle = turn(sensor_data, 12);
+
+            // send back angle for accuracy
+            sprintf(returnString,"%d\n",angle);
+            sendUartString(returnString);
             break;
         case 'm': //scan
             lcd_clear();

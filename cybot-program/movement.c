@@ -5,7 +5,7 @@
 #include "lcd.h"
 
 // moves the bot [centimeters]
-void move(oi_t *sensor, int centimeters){
+double move(oi_t *sensor, int centimeters){
     // postive cm   = forwards
     // negative cm  = backwards
 
@@ -20,6 +20,7 @@ void move(oi_t *sensor, int centimeters){
         sum += abs(sensor->distance);
     }
     oi_setWheels(0, 0); // stop
+    return sum
 }
 
 // turns the bot [degrees]
@@ -42,6 +43,7 @@ void turn(oi_t *sensor, double degrees){
         }
     }
     oi_setWheels(0, 0); // stop
+    return currAngle
 }
 
 void moveAndAvoid(oi_t *sensor, int centimeters){
