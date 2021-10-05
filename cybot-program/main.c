@@ -144,6 +144,8 @@ int main(void) {
             }
             sendUartString("Complete\n") // tell uart we are done calibrating
             break;
+        case 't' // toggle modes
+            
         }
     }
     oi_free(sensor_data);
