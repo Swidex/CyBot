@@ -17,5 +17,6 @@ class UartConnection:
             self.ser.flushOutput()
 
     def send_byte(self,data):
-        self.write(data)
+        data = bytes(data, 'utf-8')
+        self.ser.write(data)
         
