@@ -4,26 +4,47 @@
 
 // Scan value
 typedef struct{
-	float sound_dist;  // Distance from Ping Sensor
-	int IR_raw_val;    // Raw ADC value from IR sensro
+    float sound_dist;  // Distance from Ping Sensor
+    int IR_raw_val;    // Raw ADC value from IR sensro
 } cyBOT_Scan_t;
 
 
 // Initialize cyBot Scan sensors and servo
 void cyBOT_init_Scan(void);
 
-
-// Point sersors to angle, and get a scan value
-// Input: int angle, angle to point sensor
-// Input: cyBOT_Scan_t* getScan, location of a CyBOT_Scan_t struct
-// Note 1: To pass the location of a varble use the & operator.
-// For example:
-//   int my_angle
-//   cyBOT_Scan_t x;
-//   cyBOT_Scan(my_angle, &x);
-// Note 2: It is OK that this function is not calabrated to 
-// 0 - 180 degrees.  You will calibrate your version in Lab 9.
+// Point sensors to angle, and get a scan value
+// Input Parameters:
+// angle: Direction to point the Sensors for taking a measurement
+// getScan : The location of a declared cyBOT_Scant_t structure
 void cyBOT_Scan(int angle, cyBOT_Scan_t* getScan);
+
+
+
+
+////////////////////////////////////////////
+//// Calibrate physical CyBOT            ///
+////////////////////////////////////////////
+
+// These will be different for each physical CyBOT servo
+// where 0 degrees (right), and 180 degrees (left) is located
+// These values can be found by running the servo_calibrate function.
+// Once you know the values, then you can set them in main().
+int right_calibration_value;
+int left_calibration_value;
+
+
+// Severo Calibrate value struct
+typedef struct{
+    int right;  // Right (0 degree) calibration value
+    int left;   // Left (180 degree) calibration value
+} cyBOT_SERVRO_cal_t;
+
+
+// Return a struct containing the right (0 degree), and
+// left (180 degree) values that can be used to set
+// right_calibration_value, and left_calibration_value
+cyBOT_SERVRO_cal_t cyBOT_SERVO_cal(void);
+
 
 
 #endif /* CYBOT_SCAN_H_ */
