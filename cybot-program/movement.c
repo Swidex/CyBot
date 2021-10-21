@@ -57,3 +57,55 @@ double turn(oi_t *sensor, double degrees){
     oi_setWheels(0, 0); // stop
     return degrees;
 }
+
+void moveAndAvoid(oi_t *sensor, double returnDist) {
+    int sideOffset = 0;
+    float totalDist = 0;
+    char returnString[20];
+
+    while (totalDist < returnDist*10) {
+        oi_setWheels(50, 50);
+        oi_update(sensor);
+        if (sensor->bumpLeft) {
+            sendUartString("BMP,-1\n");
+            sprintf(returnString,"MOV,%0.2f\n",((float)sensor->distance / 10));
+            sendUartString(returnString);
+
+            move(sensor, -10);
+            sendUartString("BMP,0\n");
+
+            turn(sensor, -90);
+            move(sensor, 25);
+            turn(sensor, 90);
+
+            returnDist += 150; //account for extra movement
+            sideOffset += 25; //account for side offset
+        }
+        else if(sensor->bumpRight) {
+            sendUartString("BMP,1\n");
+            sprintf(returnString,"MOV,%0.2f\n",((float)sensor->distance / 10));
+            sendUartString(returnString);
+
+            move(sensor, -10);
+            sendUartString("BMP,0\n");
+
+            turn(sensor, 90);
+            move(sensor, 25);
+            turn(sensor, -90);
+
+            returnDist += 150; //account for extra movement
+            sideOffset -= 25; //account for side offset
+        } else {
+            sprintf(returnString,"MOV,%0.2f\n",((float)sensor->distance / 10));
+            sendUartString(returnString);
+        }
+        totalDist += sensor->distance;
+    }
+    if (sideOffset > 0) {
+        turn(sensor,90);
+        move(sensor,abs(sideOffset));
+    } else if (sideOffset < 0) {
+        turn(sensor,-90);
+        move(sensor,abs(sideOffset));
+    }
+}

@@ -10,4 +10,4 @@ double move(oi_t *sensor, int centimeters);
 double turn(oi_t *sensor, double degrees);
     // turns the bot [degrees]
 
-void moveAndAvoid(oi_t *sensor, int centimeters);
+void moveAndAvoid(oi_t *sensor, double returnDist);
