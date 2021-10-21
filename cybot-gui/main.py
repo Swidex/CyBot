@@ -1,5 +1,5 @@
 import serial.serialutil
-import pygame, math, sys, uart, serial, threading
+import pygame, math, sys, uart, serial, threading, time
 
 # Constants
 BLUE = (25, 25, 200)
@@ -27,7 +27,10 @@ def polar_to_cart(deg, amt):
 
 def ir_to_cm(val):
     """convert ir values into centimeters"""
-    return 2600000 * pow(val,-1.56)
+    return 2600000 * pow(float(val),-1.56)
+
+def get_dist(x1,x2,y1,y2):
+    return abs(math.sqrt(pow(x1-x2,2) + pow(y1-y2,2)))
 
 class Player():
     """cybot player class"""
@@ -59,34 +62,25 @@ class Player():
         self.y = SCREEN_HEIGHT / 2
         self.rot = 0
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
-        objects.clear()
+        ScanData.clear()
 
     def scan(self,theta,ir,ping):
         """scan 180 degrees infront"""
 
         self.servo_pos = theta
-        # create new objects at coordinates
-        if ir < 120:
-            irx, iry = polar_to_cart(int(self.servo_pos) - 90 + self.rot, ir * CM_TO_PX)
-            pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, ping * CM_TO_PX)
-            offsetx, offsety = polar_to_cart(int(self.rot), float(34.8 / 2) * CM_TO_PX)
-            objects.append(Object(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,theta))    
+        ir = ir_to_cm(ir)
+        irx, iry = polar_to_cart(int(self.servo_pos) - 90 + self.rot,ir * CM_TO_PX)
+        pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, ping * CM_TO_PX)
+        offsetx, offsety = polar_to_cart(int(self.rot), float(34.8 / 2) * CM_TO_PX)
+        ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,theta,ir,ping))  
 
-class Object():
+class Point():
     """class to hold scan data"""
 
-    def __init__(self,irx,iry,pgx,pgy,theta):
-        self.irx = irx
-        self.iry = iry
-        self.pgx = pgx
-        self.pgy = pgy
+    def __init__(self,irx,iry,pgx,pgy,theta,ir,pg):
+        self.ir = [ir,[irx,iry]]
+        self.pg = [pg,[pgx,pgy]]
         self.theta = theta
-
-    def compare_to(self,object):
-        dist = math.sqrt(pow((self.x - object.x),2) + pow(self.y - object.y,2))
-        if dist < 25:
-            return True
-        return False
 
 # initalize serial connection
 try:
@@ -102,10 +96,9 @@ except serial.serialutil.SerialException:
 # initalize pygame
 pygame.init()
 font = pygame.font.SysFont('Segoe UI', 30)
-
 screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
-objects = []
-rendered_objects = []
+ScanData = []
+RenderedScan = []
 
 running = True
 while running:
@@ -125,19 +118,20 @@ while running:
                 finally:
                     main = False
             if event.key == ord('a'): # turn left
-                cybot_uart.send_byte('a')
+                cybot_uart.send_data("a")
+                cybot_uart.send_data("d15x")
             if event.key == ord('d'): # turn right
-                cybot_uart.send_byte('d')
+                cybot_uart.send_data("d-15x")
             if event.key == ord('w'): # move forward
-               cybot_uart.send_byte('w')
+                cybot_uart.send_data("w20x")
             if event.key == ord('s'): # move backwards
-                cybot_uart.send_byte('s')
+                cybot_uart.send_data("w-20x")
             if event.key == ord('m'): # scan
-                cybot_uart.send_byte('m')
+                cybot_uart.send_data("m")
             if event.key == ord('t'): # toggle autonomous
-                cybot_uart.send_byte('t')
+                cybot_uart.send_data("t")
             if event.key == ord('k'): # clear
-                objects.clear()
+                ScanData.clear()
 
     # fill background
     screen.fill(BLACK)
@@ -158,19 +152,23 @@ while running:
         mode_text = font.render("mode: auto", False, WHITE)
     screen.blit(mode_text,(0,0))
 
-    for x in objects:
-        pygame.draw.circle(screen, RED, (x.irx, x.iry), 2)
-
-    rendered_objects = []
-    start = 0 
-    for x in range(len(objects) - 1):
-        if abs(objects[x].theta - objects[x+1].theta) > 2 or (x + 1) == (len(objects) - 1):
-            rendered_objects.append(int((start + x) / 2))
+    RenderedScan.clear()
+    start = 0
+    end = 0
+    for x in range(len(ScanData)):
+        pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+        if ScanData[x].ir[0] < 180 and ScanData[x].pg[0] < 300:
+            end = x
+        elif (abs(start - end) >= 3):
+            RenderedScan.append([ScanData[start].pg[1],ScanData[int((start+end)/2)].pg[1],ScanData[end].pg[1]])
             start = x + 1
-
-    for i in rendered_objects:
-        pygame.draw.circle(screen, WHITE, [objects[i].pgx, objects[i].pgy], 4)
-
+            end = x + 1
+        else:
+            start = x + 1
+            end = x + 1
+    
+    for points in RenderedScan:
+        pygame.draw.polygon(screen, WHITE, points, 5)
 
 
     pygame.display.flip()
