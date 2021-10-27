@@ -12,12 +12,8 @@ GREEN = (25, 200, 25)
 CM_TO_PX = 1.724
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
-
-HEADER_CODES = ["BRK\n","CMP\n","SCN\n","MOV\n","TRN\n","CAL\n","SRV\n"]
-
-# ERROR MSGS
-NO_HEADER_RECEIVED = "ERR: Did not receive header response."
-PREMATURE_FUNC_END = "ERR: Ended prematurely due to interruption to command."
+EST_DIST = 3.67
+EST_ANGLE = 17.53
 
 def polar_to_cart(deg, amt):
     """convert polar coordinates to cartesian"""
@@ -44,18 +40,70 @@ class Player():
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
         self.manual = True
         self.bumper = ""
+        self.estimating = False
 
-    def move(self, amt):
-        """move forward/backwards"""
-        
-        x, y = polar_to_cart(self.rot, amt * CM_TO_PX)
+    def update(self, angle, dist):
+        """update position info"""
+        self.rot += angle
+
+        x, y = polar_to_cart(self.rot, dist * CM_TO_PX)
         self.x += x
         self.y += y
         self.rect = pygame.Rect(self.x-(self.size/2),self.y-(self.size/2),self.size,self.size)
 
-    def turn(self, angle):
-        """turn right/left"""
-        self.rot += angle
+    def estimate_move(self):
+        cybot_uart.send_data('w')
+        time.sleep(0.25)
+        cybot_uart.send_data('w')
+
+    def estimate_turn(self):
+        cybot_uart.send_data('a')
+        time.sleep(0.25)
+        cybot_uart.send_data('a')
+
+    def forward(self):
+        self.estimating = True
+        dist = 0
+        cybot_uart.send_data('w')
+        while self.estimating:
+            self.update(0, EST_DIST)
+            dist -= EST_DIST
+            time.sleep(0.25)
+        cybot_uart.send_data('w')
+        self.update(0, dist)
+
+    def back(self):
+        self.estimating = True
+        dist = 0
+        cybot_uart.send_data('s')
+        while self.estimating:
+            self.update(0, (-1)*EST_DIST)
+            dist += EST_DIST
+            time.sleep(0.25)
+        cybot_uart.send_data('s')
+        self.update(0, dist)
+
+    def left(self):
+        self.estimating = True
+        angle = 0
+        cybot_uart.send_data('a')
+        while self.estimating:
+            self.update(EST_ANGLE, 0)
+            angle -= EST_ANGLE
+            time.sleep(.25)
+        cybot_uart.send_data('a')
+        self.update(angle, 0)
+
+    def right(self):
+        self.estimating = True
+        angle = 0
+        cybot_uart.send_data('d')
+        while self.estimating:
+            self.update((-1)*EST_ANGLE, 0)
+            angle += EST_ANGLE
+            time.sleep(.25)
+        cybot_uart.send_data('d')
+        self.update(angle, 0)
 
     def clear(self):
         self.x = SCREEN_WIDTH / 2
@@ -64,23 +112,32 @@ class Player():
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
         ScanData.clear()
 
-    def scan(self,theta,ir,ping):
+    def radial_scan(self):
+        """do radial scan"""
+        start_theta = self.rot
+        while abs(self.rot - start_theta) <= 360:
+            cybot_uart.send_data('m')
+            cybot_uart.send_data('a')
+            time.sleep(.1)
+            cybot_uart.waiting = True
+            cybot_uart.send_data('a')
+
+
+    def scan(self,ir,pg):
         """scan 180 degrees infront"""
 
-        self.servo_pos = theta
         ir = ir_to_cm(ir)
-        irx, iry = polar_to_cart(int(self.servo_pos) - 90 + self.rot,ir * CM_TO_PX)
-        pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, ping * CM_TO_PX)
-        offsetx, offsety = polar_to_cart(int(self.rot), float(34.8 / 2) * CM_TO_PX)
-        ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,theta,ir,ping))  
+        irx, iry = polar_to_cart(self.rot, ir * CM_TO_PX)
+        pgx, pgy = polar_to_cart(self.rot, pg * CM_TO_PX)
+        offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
+        ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))  
 
 class Point():
     """class to hold scan data"""
 
-    def __init__(self,irx,iry,pgx,pgy,theta,ir,pg):
+    def __init__(self,irx,iry,pgx,pgy,ir,pg):
         self.ir = [ir,[irx,iry]]
         self.pg = [pg,[pgx,pgy]]
-        self.theta = theta
 
 # initalize serial connection
 try:
@@ -111,27 +168,24 @@ while running:
                 main = False
 
         if event.type == pygame.KEYDOWN:
-            if event.key == ord('q'): # quit
-                pygame.quit()
-                try:
-                    sys.exit()
-                finally:
-                    main = False
             if event.key == ord('a'): # turn left
-                cybot_uart.send_data("a")
-                cybot_uart.send_data("d15x")
+                threading.Thread(target=player.left).start()
             if event.key == ord('d'): # turn right
-                cybot_uart.send_data("d-15x")
+                threading.Thread(target=player.right).start()
             if event.key == ord('w'): # move forward
-                cybot_uart.send_data("w20x")
+                threading.Thread(target=player.forward).start()
             if event.key == ord('s'): # move backwards
-                cybot_uart.send_data("w-20x")
-            if event.key == ord('m'): # scan
+                threading.Thread(target=player.back).start()
+            if event.key == ord('m'): # scan once
                 cybot_uart.send_data("m")
-            if event.key == ord('t'): # toggle autonomous
-                cybot_uart.send_data("t")
-            if event.key == ord('k'): # clear
-                ScanData.clear()
+            if event.key == ord('n'): # radial scan
+                threading.Thread(target=player.radial_scan).start()
+            if event.key == ord('u'):
+                threading.Thread(target=player.estimate_move).start()
+            if event.key == ord('i'):
+                threading.Thread(target=player.estimate_turn).start()
+        elif event.type == pygame.KEYUP:
+            player.estimating = False
 
     # fill background
     screen.fill(BLACK)
