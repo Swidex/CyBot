@@ -17,7 +17,7 @@
 #define PING_MOD 969.33
 
 int uartTX_bump(int status, oi_t *sensor_data , char uartTX[20]) {
-    if (status != 1 && sensor_data->bumpLeft) {
+    /*if (status != 1 && sensor_data->bumpLeft) {
         sendUartString("BMP,-1\n");
         status = 1;
     } else if (status != 2 && sensor_data->bumpRight) {
@@ -26,7 +26,7 @@ int uartTX_bump(int status, oi_t *sensor_data , char uartTX[20]) {
     } else if (status > 0 && !(sensor_data->bumpRight || sensor_data->bumpLeft)){
         sendUartString("BMP,0\n");
         status = 0;
-    }
+    }*/
     return status;
 }
 
@@ -64,11 +64,13 @@ void main() {
             {
                 oi_setWheels(100, 100);
 
-                while (receive_data != 'w') {}
+                while (receive_data != 'w') {
+                    printf("%d,%d\n",sensor_data->requestedLeftVelocity, sensor_data->requestedRightVelocity);
+                }
+                oi_update(sensor_data);
                 receive_data = '\0';
                 oi_setWheels(0, 0);
 
-                oi_update(sensor_data);
                 sprintf(uartTX, "MOV,%0.2f\n",sensor_data->distance / 10.0);
 
                 lcd_clear();
@@ -80,7 +82,7 @@ void main() {
             {
                 oi_setWheels(-100, -100);
 
-                while (receive_data != 's') {}
+                while (receive_data != 's') { }
                 receive_data = '\0';
                 oi_setWheels(0, 0);
 

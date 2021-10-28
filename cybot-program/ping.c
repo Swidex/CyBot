@@ -71,7 +71,7 @@ float ping_read(){
     while (state != DONE && timeout < 10000) {timeout++;}
     if (timeout >= 10000) { return 1000.0; }
     unsigned int delta = rising_time - falling_time;
-    return (float) delta
+    return (float) delta;
 }
 
 void TIMER3B_Handler() {
