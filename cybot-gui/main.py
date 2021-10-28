@@ -14,8 +14,8 @@ CM_TO_PX = 1.724
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 
-move_avg = [3.67]
-turn_avg = [17.53]
+move_avg = [14]
+turn_avg = [70.12]
 ir_cal = [1043, 745, 610, 487, 2191, 1530, 1169, 945, 778, 672, 583, 528, 466, 406, 381, 330, 298, 268, 248, 225, 236, 235, 196, 235, 196, 168, 144, 166, 120]
 pg_cal = [16.12, 22.64, 27.04, 31.84, 7.79, 11.29, 14.86, 19.04, 23.14, 26.72, 28.85, 33.23, 36.98, 40.65, 44.12, 48.08, 51.49, 26.79, 33.26, 39.66, 66.9, 1000.0, 1000.0, 1000.0, 1000.0, 64.08, 8.82, 1000.0, 69.69]
 COEFF = 3082
@@ -28,10 +28,10 @@ def polar_to_cart(deg, amt):
     y = float(amt) * math.cos(math.radians(int(deg)))
     return x,y
 
-def objective(x, a, b):
-	return a * pow(x, b)
-
 def line_of_best_fit():
+    """set formula for calculating ir values"""
+    def objective(x, a, b):
+	    return a * pow(x, b)
     global COEFF, PWR
     popt, _ = curve_fit(objective, ir_cal, pg_cal)
     COEFF, PWR = popt
@@ -71,25 +71,31 @@ class Player():
         self.rect = pygame.Rect(self.x-(self.size/2),self.y-(self.size/2),self.size,self.size)
 
     def calibrate_move_estimation(self):
-        """take 10 samples of distance traveled in 0.25 seconds"""
+        """take 10 samples of distance traveled in 1 seconds"""
+        print("Now calibrating front and backwards movement...")
         for _ in range(10):
             x, y = self.x, self.y
             cybot_uart.send_data('w')
-            time.sleep(0.25)
+            time.sleep(1)
             cybot_uart.send_data('w')
             move_avg.append(get_dist(x,self.x,y,self.y))
+        print("Complete!")
+        self.calibrate_turn_estimation()
 
     def calibrate_turn_estimation(self):
-        """take 10 samples of distance traveled in 0.25 seconds"""
+        """take 10 samples of distance traveled in 1 seconds"""
+        print("Now calibrating turning movement...")
         for _ in range(10):
             rot = self.rot
             cybot_uart.send_data('a')
-            time.sleep(0.25)
+            time.sleep(1)
             cybot_uart.send_data('a')
             turn_avg.append(abs(self.rot - rot))
+        print("Calibration Complete!")
 
     def calibrate_ir(self):
         """calibrate ir sensor w/ ping sensor"""
+        print("Calibrating IR sensors...")
         while self.bumper == "":
             cybot_uart.send_data('w')
             time.sleep(0.25)
@@ -106,9 +112,9 @@ class Player():
             if ScanData[len(ScanData) - 1].pg[0] >= 500: continue
             ir_cal.append(IR_RAW)
             pg_cal.append(ScanData[len(ScanData) - 1].pg[0])
+        print("Complete!")
         print("Recommend: Restart client or clear scan data (k).")
-        print(ir_cal)
-        print(pg_cal)
+        self.calibrate_move_estimation()
 
     def forward(self):
         """move forward until not estimating"""
@@ -116,8 +122,8 @@ class Player():
         dist = 0
         cybot_uart.send_data('w')
         while self.estimating:
-            self.update(0, avg(move_avg))
-            dist -= avg(move_avg)
+            self.update(0, avg(move_avg) / 4)
+            dist -= avg(move_avg) / 4
             time.sleep(0.25)
         cybot_uart.send_data('w')
         self.update(0, dist)
@@ -128,8 +134,8 @@ class Player():
         dist = 0
         cybot_uart.send_data('s')
         while self.estimating:
-            self.update(0, (-1)*avg(move_avg))
-            dist += avg(move_avg)
+            self.update(0, (-1)*avg(move_avg) / 4)
+            dist += avg(move_avg) / 4
             time.sleep(0.25)
         cybot_uart.send_data('s')
         self.update(0, dist)
@@ -140,8 +146,8 @@ class Player():
         angle = 0
         cybot_uart.send_data('a')
         while self.estimating:
-            self.update(avg(turn_avg), 0)
-            angle -= avg(turn_avg)
+            self.update(avg(turn_avg) / 4, 0)
+            angle -= avg(turn_avg) / 4
             time.sleep(.25)
         cybot_uart.send_data('a')
         self.update(angle, 0)
@@ -152,8 +158,8 @@ class Player():
         angle = 0
         cybot_uart.send_data('d')
         while self.estimating:
-            self.update((-1)*avg(turn_avg), 0)
-            angle += avg(turn_avg)
+            self.update((-1)*avg(turn_avg) / 4, 0)
+            angle += avg(turn_avg) / 4
             time.sleep(.25)
         cybot_uart.send_data('d')
         self.update(angle, 0)
@@ -194,7 +200,7 @@ class Point():
         self.ir = [ir,[irx,iry]]
         self.pg = [pg,[pgx,pgy]]
 
-# initalize serial connection
+# try to initalize serial connection
 try:
     cybot_uart = uart.UartConnection()
     player = Player()
@@ -203,7 +209,6 @@ try:
     stream.start()
 except serial.serialutil.SerialException:
     sys.exit()
-
 
 # initalize pygame
 pygame.init()
@@ -235,16 +240,14 @@ while running:
                 cybot_uart.send_data("m")
             if event.key == ord('n'): # radial scan
                 threading.Thread(target=player.radial_scan).start()
-            if event.key == ord('u'):
-                threading.Thread(target=player.estimate_move).start()
-            if event.key == ord('i'):
-                threading.Thread(target=player.estimate_turn).start()
             if event.key == ord('c'): # calibrate
                 threading.Thread(target=player.calibrate_ir).start()
             if event.key == ord('f'): # apply calibration settings
                 line_of_best_fit()
             if event.key == ord('k'): # clear scan data
                 ScanData.clear()
+            if event.key == ord('r'): # reset cybot location
+                pass
         elif event.type == pygame.KEYUP:
             player.estimating = False
 
