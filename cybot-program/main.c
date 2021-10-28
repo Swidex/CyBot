@@ -64,13 +64,11 @@ void main() {
             {
                 oi_setWheels(100, 100);
 
-                while (receive_data != 'w') {
-                    printf("%d,%d\n",sensor_data->requestedLeftVelocity, sensor_data->requestedRightVelocity);
-                }
-                oi_update(sensor_data);
+                while (receive_data != 'w') {}
                 receive_data = '\0';
                 oi_setWheels(0, 0);
-
+				oi_update(sensor_data);
+				
                 sprintf(uartTX, "MOV,%0.2f\n",sensor_data->distance / 10.0);
 
                 lcd_clear();
@@ -82,7 +80,7 @@ void main() {
             {
                 oi_setWheels(-100, -100);
 
-                while (receive_data != 's') { }
+                while (receive_data != 's') {}
                 receive_data = '\0';
                 oi_setWheels(0, 0);
 
