@@ -1,5 +1,5 @@
 import serial.serialutil
-import pygame, math, sys, uart, serial, threading, time
+import pygame, math, sys, uart, serial, threading, time, numpy
 from scipy.optimize import curve_fit
 
 # Constants
@@ -16,7 +16,11 @@ SCREEN_HEIGHT = 720
 
 move_avg = [3.67]
 turn_avg = [17.53]
-ir_calibration = ([],[])
+ir_cal = [1043, 745, 610, 487, 2191, 1530, 1169, 945, 778, 672, 583, 528, 466, 406, 381, 330, 298, 268, 248, 225, 236, 235, 196, 235, 196, 168, 144, 166, 120]
+pg_cal = [16.12, 22.64, 27.04, 31.84, 7.79, 11.29, 14.86, 19.04, 23.14, 26.72, 28.85, 33.23, 36.98, 40.65, 44.12, 48.08, 51.49, 26.79, 33.26, 39.66, 66.9, 1000.0, 1000.0, 1000.0, 1000.0, 64.08, 8.82, 1000.0, 69.69]
+COEFF = 3082
+PWR = -0.748
+IR_RAW = 0
 
 def polar_to_cart(deg, amt):
     """convert polar coordinates to cartesian"""
@@ -24,14 +28,18 @@ def polar_to_cart(deg, amt):
     y = float(amt) * math.cos(math.radians(int(deg)))
     return x,y
 
-def power_curve(x, a, b, c):
-    return (a^c) * x + b
+def objective(x, a, b):
+	return a * pow(x, b)
+
+def line_of_best_fit():
+    global COEFF, PWR
+    popt, _ = curve_fit(objective, ir_cal, pg_cal)
+    COEFF, PWR = popt
+    print(COEFF, PWR)
 
 def ir_to_cm(val):
     """convert ir values into centimeters"""
-    popt, _ = curve_fit(power_curve, ir_calibration[0], ir_calibration[1])
-    a, b, c = popt
-    return power_curve(val, a, b, c)
+    return COEFF * pow(val,PWR)
 
 def get_dist(x1,x2,y1,y2):
     return abs(math.sqrt(pow(x1-x2,2) + pow(y1-y2,2)))
@@ -81,22 +89,26 @@ class Player():
             turn_avg.append(abs(self.rot - rot))
 
     def calibrate_ir(self):
-        """calibrate ir sensor"""
-        cybot_uart.send_data('w')
-        while self.bumper == "": continue # wait until bumper is pressed
-        cybot_uart.send_data('w') # stop moving
-
-        time.sleep(0.1)
-
-        x, y = self.x, self.y
-        for _ in range(10):
+        """calibrate ir sensor w/ ping sensor"""
+        while self.bumper == "":
             cybot_uart.send_data('w')
             time.sleep(0.25)
-            cybot_uart.send_data('w')
-            self.scan()
-            ir_calibration[0].append(get_dist(x,self.x,y,self.y))
-            ir_calibration[1].append(ScanData[len(ScanData) - 1].ir[0])
+            cybot_uart.send_data('w') # stop moving
+
+        time.sleep(0.1)
+        
+        for _ in range(20):
+            cybot_uart.send_data('s')
+            time.sleep(0.25)
+            cybot_uart.send_data('s')
+            cybot_uart.send_data('m')
+            time.sleep(0.1)
+            if ScanData[len(ScanData) - 1].pg[0] >= 500: continue
+            ir_cal.append(IR_RAW)
+            pg_cal.append(ScanData[len(ScanData) - 1].pg[0])
         print("Recommend: Restart client or clear scan data (k).")
+        print(ir_cal)
+        print(pg_cal)
 
     def forward(self):
         """move forward until not estimating"""
@@ -159,19 +171,21 @@ class Player():
         while abs(self.rot - start_theta) <= 360:
             cybot_uart.send_data('m')
             cybot_uart.send_data('a')
-            time.sleep(.1)
+            time.sleep(.05)
             cybot_uart.waiting = True
             cybot_uart.send_data('a')
 
 
     def scan(self,ir,pg):
         """scan 180 degrees infront"""
-
+        global IR_RAW
+        IR_RAW = int(ir)  # for calibration
         ir = ir_to_cm(ir)
         irx, iry = polar_to_cart(self.rot, ir * CM_TO_PX)
         pgx, pgy = polar_to_cart(self.rot, pg * CM_TO_PX)
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
-        ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))  
+        ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
+        
 
 class Point():
     """class to hold scan data"""
@@ -181,18 +195,14 @@ class Point():
         self.pg = [pg,[pgx,pgy]]
 
 # initalize serial connection
-while (1):
-    try:
-        cybot_uart = uart.UartConnection()
-        player = Player()
-        stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
-        stream.daemon = True
-        stream.start()
-    except serial.serialutil.SerialException:
-        print("ERR: Failed to connect to CyBot.")
-        again = input("Try again? (y/N) > ")
-        if again != 'y':
-            sys.exit()
+try:
+    cybot_uart = uart.UartConnection()
+    player = Player()
+    stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
+    stream.daemon = True
+    stream.start()
+except serial.serialutil.SerialException:
+    sys.exit()
 
 
 # initalize pygame
@@ -229,6 +239,12 @@ while running:
                 threading.Thread(target=player.estimate_move).start()
             if event.key == ord('i'):
                 threading.Thread(target=player.estimate_turn).start()
+            if event.key == ord('c'): # calibrate
+                threading.Thread(target=player.calibrate_ir).start()
+            if event.key == ord('f'): # apply calibration settings
+                line_of_best_fit()
+            if event.key == ord('k'): # clear scan data
+                ScanData.clear()
         elif event.type == pygame.KEYUP:
             player.estimating = False
 
