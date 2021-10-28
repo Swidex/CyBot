@@ -9,23 +9,14 @@
 #include "movement.h"
 #include "uart.h"
 #include "adc.h"
-#include "cyBot_Scan.h"
+#include "ping.h"
 
 #define MAX_OBJECTS 10
 #define MAX_DIST 800
 #define SCAN_INTERVAL 2
+#define PING_MOD 969.33
 
-void scanInfront(char uartTX[20]){
-    int theta;
-    cyBOT_Scan_t scanData;
-    for (theta = 0; theta <= 180; theta += 2 ) {
-        cyBOT_Scan(theta, &scanData); // scan at theta degrees.
-        sprintf(uartTX, "SCN,%d,%d,%0.2f\n",theta,adc_read(),scanData.sound_dist);
-        sendUartString(uartTX);
-    }
-}
-
-int bumpStatus(int status, oi_t *sensor_data , char uartTX[20]) {
+int uartTX_bump(int status, oi_t *sensor_data , char uartTX[20]) {
     if (status != 1 && sensor_data->bumpLeft) {
         sendUartString("BMP,-1\n");
         status = 1;
@@ -39,69 +30,106 @@ int bumpStatus(int status, oi_t *sensor_data , char uartTX[20]) {
     return status;
 }
 
-int uartRX_int(int maxTimeout, char endChar) {
-    int i = 0;
-    int timeout = 0;
-    char stringRX[10];
-
-    while (timeout <= maxTimeout) {
-        char uartRX = receive_data;
-        receive_data = '\0';
-        timer_waitMillis(10);
-        if ( uartRX == endChar ) {
-            int intRX = atoi(stringRX);
-            return intRX;
-        } else if ( uartRX != '\0'){
-            stringRX[i] = uartRX;
-            i++;
-        } else {
-            timeout++;
-        }
-    }
-}
-
 void main() {
     lcd_init();
+
+    lcd_clear();
+    lcd_puts("Initializing...");
+
     uart_init(115200);
-    uart_interrupt_init();
     adc_init();
+    ping_init();
     oi_t *sensor_data = oi_alloc();
     oi_init(sensor_data);
-    cyBOT_init_Scan();
+
+    int status = 0;             // var for bumper status
+    char uartRX;                // var to hold uart RX data
+    char uartTX[20] = "";       // string to hold uart TX data
+
     lcd_clear();
-
-    // calibration for servo
-    left_calibration_value = 1272250;
-    right_calibration_value = 301000;
-
-    int status = 0;
-    char uartRX;
-    char uartTX[20] = "";
+    lcd_puts("Complete!");
 
     while(1)
     {
         oi_update(sensor_data);
-        oi_setWheels(0, 0); // stop
-        status = bumpStatus(status, sensor_data, uartTX); // bumper data
-        uartRX = receive_data; // uart data
-        receive_data = '\0'; // clear global var
+        oi_setWheels(0, 0);
+
+        status = uartTX_bump(status, sensor_data, uartTX); // bumper data
+        uartRX = receive_data; // set local variable
+        receive_data = '\0'; // clear RX for interrupts
+
         switch ( uartRX )
         {
-            case 'w': // forward and back
+            case 'w': // simple forward
             {
-                int dist = uartRX_int(50, 'x');
-                move(sensor_data, dist);
+                oi_setWheels(100, 100);
+
+                while (receive_data != 'w') {}
+                receive_data = '\0';
+                oi_setWheels(0, 0);
+
+                oi_update(sensor_data);
+                sprintf(uartTX, "MOV,%0.2f\n",sensor_data->distance / 10.0);
+
+                lcd_clear();
+                lcd_puts(uartTX);
+                sendUartString(uartTX);
                 break;
             }
-            case 'd': // turn left and right
+            case 's': // simple back
             {
-                int deg = uartRX_int(50, 'x');
-                turn(sensor_data, deg);
+                oi_setWheels(-100, -100);
+
+                while (receive_data != 's') {}
+                receive_data = '\0';
+                oi_setWheels(0, 0);
+
+                oi_update(sensor_data);
+                sprintf(uartTX, "MOV,%0.2f\n",sensor_data->distance / 10.0);
+
+                lcd_clear();
+                lcd_puts(uartTX);
+                sendUartString(uartTX);
                 break;
             }
-            case 'm': //scan
+            case 'a': // simple left
             {
-                scanInfront(uartTX);
+                oi_setWheels(100, -100);
+
+                while (receive_data != 'a') {}
+                receive_data = '\0';
+                oi_setWheels(0, 0);
+
+                oi_update(sensor_data);
+                sprintf(uartTX, "TRN,%0.2f\n",sensor_data->angle);
+
+                lcd_clear();
+                lcd_puts(uartTX);
+                sendUartString(uartTX);
+                break;
+            }
+            case 'd': // simple right
+            {
+                oi_setWheels(-100, 100);
+
+                while (receive_data != 'd') {}
+                receive_data = '\0';
+                oi_setWheels(0, 0);
+
+                oi_update(sensor_data);
+                sprintf(uartTX, "TRN,%0.2f\n",sensor_data->angle);
+
+                lcd_clear();
+                lcd_puts(uartTX);
+                sendUartString(uartTX);
+                break;
+            }
+            case 'm': // scan
+            {
+                lcd_clear();
+                sprintf(uartTX, "SCN,%d,%0.2f\n",adc_read(),ping_read() / PING_MOD);
+                sendUartString(uartTX);
+                lcd_puts(uartTX);
                 break;
             }
         }

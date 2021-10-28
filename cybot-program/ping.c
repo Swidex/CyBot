@@ -68,10 +68,10 @@ void send_pulse() {
 float ping_read(){
     send_pulse();
     int timeout = 0;
-    while (state != DONE && timeout < 5000) {timeout++;}
-    if (timeout >= 5000) { return 1000.0; }
+    while (state != DONE && timeout < 10000) {timeout++;}
+    if (timeout >= 10000) { return 1000.0; }
     unsigned int delta = rising_time - falling_time;
-    return (float) delta / 969.33;
+    return (float) delta
 }
 
 void TIMER3B_Handler() {
