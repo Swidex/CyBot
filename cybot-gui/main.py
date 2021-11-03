@@ -4,7 +4,7 @@ from scipy.optimize import curve_fit
 
 # Constants
 BLUE = (25, 25, 200)
-PURPLE = (200, 25, 200)
+PURPLE = (150, 25, 200)
 BLACK = (23, 23, 23)
 WHITE = (254, 254, 254)
 RED = (200, 25, 25)
@@ -171,26 +171,18 @@ class Player():
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
         ScanData.clear()
 
-    def radial_scan(self):
-        """do radial scan"""
-        start_theta = self.rot
-        while abs(self.rot - start_theta) <= 360:
-            cybot_uart.send_data('m')
-            cybot_uart.send_data('a')
-            time.sleep(.05)
-            cybot_uart.waiting = True
-            cybot_uart.send_data('a')
-
-
-    def scan(self,ir,pg):
+    def scan(self,theta,ir,pg):
         """scan 180 degrees infront"""
         global IR_RAW
+
+        self.servo_pos = theta
         IR_RAW = int(ir)  # for calibration
         ir = ir_to_cm(ir)
-        irx, iry = polar_to_cart(self.rot, ir * CM_TO_PX)
-        pgx, pgy = polar_to_cart(self.rot, pg * CM_TO_PX)
+        irx, iry = polar_to_cart(int(self.servo_pos) - 90 + self.rot, ir * CM_TO_PX)
+        pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, pg * CM_TO_PX)
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
-        ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
+        if ir < 100:
+            ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
         
 
 class Point():
@@ -239,7 +231,7 @@ while running:
             if event.key == ord('m'): # scan once
                 cybot_uart.send_data("m")
             if event.key == ord('n'): # radial scan
-                threading.Thread(target=player.radial_scan).start()
+                cybot_uart.send_data("n")
             if event.key == ord('c'): # calibrate
                 threading.Thread(target=player.calibrate_ir).start()
             if event.key == ord('f'): # apply calibration settings
@@ -274,19 +266,8 @@ while running:
     start = 0
     end = 0
     for x in range(len(ScanData)):
+        pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
         pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
-        if ScanData[x].ir[0] < 180 and ScanData[x].pg[0] < 300:
-            end = x
-        elif (abs(start - end) >= 3):
-            RenderedScan.append([ScanData[start].pg[1],ScanData[int((start+end)/2)].pg[1],ScanData[end].pg[1]])
-            start = x + 1
-            end = x + 1
-        else:
-            start = x + 1
-            end = x + 1
-    
-    for points in RenderedScan:
-        pygame.draw.polygon(screen, WHITE, points, 5)
 
 
     pygame.display.flip()

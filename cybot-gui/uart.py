@@ -18,7 +18,7 @@ class UartConnection:
                 player.update(float(data[1]), 0)
                 self.waiting = False
             elif "SCN" == data[0]:
-                player.scan(float(data[1]),float(data[2]))
+                player.scan(float(data[1]),float(data[2]),float(data[3]))
             elif "BMP" == data[0]:
                 data[1] = int(data[1])
                 if data[1] > 0:
