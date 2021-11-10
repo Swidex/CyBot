@@ -13,6 +13,17 @@
 
 #define PING_MOD 969.33
 
+int uartTX_bump(int status, oi_t *sensor_data , char uartTX[20]) {
+    if (status != -1 && sensor_data->bumpLeft) {
+        status = -1;
+    } else if (status != 1 && sensor_data->bumpRight) {
+        status = 1;
+    } else if (status != 0 && !(sensor_data->bumpRight || sensor_data->bumpLeft)){
+        status = 0;
+    }
+    return status;
+}
+
 void scanInfront(char* uartTX)
 {
     lcd_clear();
@@ -35,6 +46,8 @@ void main() {
     oi_t *sensor_data = oi_alloc();
     oi_init(sensor_data);
 
+    bool inAction = false;
+    int status = 0;             // var for bumper status
     char uartRX;                // var to hold uart RX data
     char uartTX[20] = "";       // string to hold uart TX data
 
@@ -43,9 +56,14 @@ void main() {
 
     while(1)
     {
-        oi_update(sensor_data);
-        oi_setWheels(0, 0);
+        status = uartTX_bump(status, sensor_data, uartTX); // bumper data
+        if (sensor_data->angle != 0 || sensor_data->distance != 0 || status != 0)
+        {
+            sprintf(uartTX,"UPD,%0.2f,%0.2f,%d\n", sensor_data->angle, sensor_data->distance / 10.0, status);
+            sendUartString(uartTX);
+        }
 
+        oi_update(sensor_data);
         uartRX = receive_data; // set local variable
         receive_data = '\0'; // clear RX for interrupts
 
@@ -53,66 +71,54 @@ void main() {
         {
             case 'w': // simple forward
             {
-                oi_setWheels(100, 100);
-
-                while (receive_data != 'w') {}
-                receive_data = '\0';
-                oi_setWheels(0, 0);
-				oi_update(sensor_data);
-				
-                sprintf(uartTX, "MOV,%0.2f\n",sensor_data->distance / 10.0);
-
-                lcd_clear();
-                lcd_puts(uartTX);
-                sendUartString(uartTX);
+                if (inAction)
+                {
+                    oi_setWheels(0, 0);
+                    inAction = false;
+                } else
+                {
+                    oi_setWheels(100, 100);
+                    inAction = true;
+                }
                 break;
             }
             case 's': // simple back
             {
-                oi_setWheels(-100, -100);
-
-                while (receive_data != 's') {}
-                receive_data = '\0';
-                oi_setWheels(0, 0);
-
-                oi_update(sensor_data);
-                sprintf(uartTX, "MOV,%0.2f\n",sensor_data->distance / 10.0);
-
-                lcd_clear();
-                lcd_puts(uartTX);
-                sendUartString(uartTX);
+                if (inAction)
+                {
+                    oi_setWheels(0, 0);
+                    inAction = false;
+                } else
+                {
+                    oi_setWheels(-100, -100);
+                    inAction = true;
+                }
                 break;
             }
             case 'a': // simple left
             {
-                oi_setWheels(100, -100);
-
-                while (receive_data != 'a') {}
-                receive_data = '\0';
-                oi_setWheels(0, 0);
-
-                oi_update(sensor_data);
-                sprintf(uartTX, "TRN,%0.2f\n",sensor_data->angle);
-
-                lcd_clear();
-                lcd_puts(uartTX);
-                sendUartString(uartTX);
+                if (inAction)
+                {
+                    oi_setWheels(0, 0);
+                    inAction = false;
+                } else
+                {
+                    oi_setWheels(100, -100);
+                    inAction = true;
+                }
                 break;
             }
             case 'd': // simple right
             {
-                oi_setWheels(-100, 100);
-
-                while (receive_data != 'd') {}
-                receive_data = '\0';
-                oi_setWheels(0, 0);
-
-                oi_update(sensor_data);
-                sprintf(uartTX, "TRN,%0.2f\n",sensor_data->angle);
-
-                lcd_clear();
-                lcd_puts(uartTX);
-                sendUartString(uartTX);
+                if (inAction)
+                {
+                    oi_setWheels(0, 0);
+                    inAction = false;
+                } else
+                {
+                    oi_setWheels(-100, 100);
+                    inAction = true;
+                }
                 break;
             }
             case 'm': // scan
