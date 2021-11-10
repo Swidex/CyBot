@@ -11,26 +11,20 @@ class UartConnection:
         while True:
             data = self.ser.read_until().decode("utf-8").split(",")
             print(data)
-            if "MOV" == data[0]:
-                player.update(0, float(data[1]))
-                self.waiting = False
-            elif "TRN" == data[0]:
-                player.update(float(data[1]), 0)
-                self.waiting = False
+            if "UPD" == data[0]:
+                player.update(float(data[1]), float(data[2]))
+                data[3] = int(data[3])
+                if data[3] > 0:
+                    player.bumper = "right"
+                elif data[3] < 0:
+                    player.bumper = "left"
+                elif data[3] == 0:
+                    player.bumper = ""
             elif "SCN" == data[0]:
                 player.scan(float(data[1]),float(data[2]),float(data[3]))
-            elif "BMP" == data[0]:
-                data[1] = int(data[1])
-                if data[1] > 0:
-                    player.bumper = "right"
-                elif data[1] < 0:
-                    player.bumper = "left"
-                elif data[1] == 0:
-                    player.bumper = ""
 
     def send_data(self,data):
         for x in range(len(data)):
             self.ser.write(bytes(data[x], 'ascii'))
-            time.sleep(0.1) # wait 1 ms
 
         

@@ -70,29 +70,6 @@ class Player():
         self.y += y
         self.rect = pygame.Rect(self.x-(self.size/2),self.y-(self.size/2),self.size,self.size)
 
-    def calibrate_move_estimation(self):
-        """take 10 samples of distance traveled in 1 seconds"""
-        print("Now calibrating front and backwards movement...")
-        for _ in range(10):
-            x, y = self.x, self.y
-            cybot_uart.send_data('w')
-            time.sleep(1)
-            cybot_uart.send_data('w')
-            move_avg.append(get_dist(x,self.x,y,self.y))
-        print("Complete!")
-        self.calibrate_turn_estimation()
-
-    def calibrate_turn_estimation(self):
-        """take 10 samples of distance traveled in 1 seconds"""
-        print("Now calibrating turning movement...")
-        for _ in range(10):
-            rot = self.rot
-            cybot_uart.send_data('a')
-            time.sleep(1)
-            cybot_uart.send_data('a')
-            turn_avg.append(abs(self.rot - rot))
-        print("Calibration Complete!")
-
     def calibrate_ir(self):
         """calibrate ir sensor w/ ping sensor"""
         print("Calibrating IR sensors...")
@@ -119,50 +96,30 @@ class Player():
     def forward(self):
         """move forward until not estimating"""
         self.estimating = True
-        dist = 0
         cybot_uart.send_data('w')
-        while self.estimating:
-            self.update(0, avg(move_avg) / 4)
-            dist -= avg(move_avg) / 4
-            time.sleep(0.25)
+        while self.estimating: continue
         cybot_uart.send_data('w')
-        self.update(0, dist)
 
     def back(self):
         """move backward until not estimating"""
         self.estimating = True
-        dist = 0
         cybot_uart.send_data('s')
-        while self.estimating:
-            self.update(0, (-1)*avg(move_avg) / 4)
-            dist += avg(move_avg) / 4
-            time.sleep(0.25)
+        while self.estimating: continue
         cybot_uart.send_data('s')
-        self.update(0, dist)
 
     def left(self):
         """turn left until not estimating"""
         self.estimating = True
-        angle = 0
         cybot_uart.send_data('a')
-        while self.estimating:
-            self.update(avg(turn_avg) / 4, 0)
-            angle -= avg(turn_avg) / 4
-            time.sleep(.25)
+        while self.estimating: continue
         cybot_uart.send_data('a')
-        self.update(angle, 0)
 
     def right(self):
         """turn right until not estimating"""
         self.estimating = True
-        angle = 0
         cybot_uart.send_data('d')
-        while self.estimating:
-            self.update((-1)*avg(turn_avg) / 4, 0)
-            angle += avg(turn_avg) / 4
-            time.sleep(.25)
+        while self.estimating: continue
         cybot_uart.send_data('d')
-        self.update(angle, 0)
 
     def clear(self):
         self.x = SCREEN_WIDTH / 2
