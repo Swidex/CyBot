@@ -38,6 +38,7 @@ void main() {
     lcd_puts("Initializing...");
 
     uart_init(115200);
+    uart_interrupt_init();
     adc_init();
     ping_init();
     servo_init();
