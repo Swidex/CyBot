@@ -11,16 +11,9 @@ class UartConnection:
         while True:
             data = self.ser.read_until().decode("utf-8").split(",")
             print(data)
-            if "UPD" == data[0]:
-                player.update(float(data[1]), float(data[2]))
-                data[3] = int(data[3])
-                if data[3] > 0:
-                    player.bumper = "right"
-                elif data[3] < 0:
-                    player.bumper = "left"
-                elif data[3] == 0:
-                    player.bumper = ""
-            elif "SCN" == data[0]:
+            if int(data[0]) == 0:
+                player.update(float(data[1]), float(data[2]), int(data[3]), int(data[4]), int(data[5]), int(data[6]), int(data[7]), int(data[8]))
+            elif int(data[0]) == 1:
                 player.scan(float(data[1]),float(data[2]),float(data[3]))
 
     def send_data(self,data):
