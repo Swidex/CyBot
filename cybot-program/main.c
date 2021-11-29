@@ -13,21 +13,10 @@
 
 #define PING_MOD 969.33
 
-int uartTX_bump(int status, oi_t *sensor_data , char uartTX[20]) {
-    if (status != -1 && sensor_data->bumpLeft) {
-        status = -1;
-    } else if (status != 1 && sensor_data->bumpRight) {
-        status = 1;
-    } else if (status != 0 && !(sensor_data->bumpRight || sensor_data->bumpLeft)){
-        status = 0;
-    }
-    return status;
-}
-
 void scanInfront(char* uartTX)
 {
     lcd_clear();
-    sprintf(uartTX, "SCN,%0.0f,%d,%0.2f\n",servo_pos,adc_read(),ping_read() / PING_MOD);
+    sprintf(uartTX, "1,%0.0f,%d,%0.2f\n",servo_pos,adc_read(),ping_read() / PING_MOD);
     sendUartString(uartTX);
     lcd_puts(uartTX);
 }
@@ -48,7 +37,6 @@ void main() {
     oi_init(sensor_data);
 
     bool inAction = false;
-    int status = 0;             // var for bumper status
     char uartRX;                // var to hold uart RX data
     char uartTX[20] = "";       // string to hold uart TX data
 
@@ -57,10 +45,30 @@ void main() {
 
     while(1)
     {
-        status = uartTX_bump(status, sensor_data, uartTX); // bumper data
-        if (sensor_data->angle != 0 || sensor_data->distance != 0 || status != 0)
+
+        if (sensor_data->angle != 0 ||
+            sensor_data->distance != 0 ||
+            sensor_data->bumpLeft != 0 ||
+            sensor_data->bumpRight != 0 ||
+            sensor_data->cliffFrontLeftSignal > 2500 ||
+            sensor_data->cliffFrontLeftSignal < 1500 ||
+            sensor_data->cliffLeftSignal > 2500 ||
+            sensor_data->cliffLeftSignal < 1500 ||
+            sensor_data->cliffFrontRightSignal > 2500 ||
+            sensor_data->cliffFrontRightSignal < 1500 ||
+            sensor_data->cliffRightSignal > 2500 ||
+            sensor_data->cliffRightSignal < 1500)
         {
-            sprintf(uartTX,"UPD,%0.2f,%0.2f,%d\n", sensor_data->angle, sensor_data->distance / 10.0, status);
+            sprintf(uartTX,"0,%0.2f,%0.2f,%d,%d,%d,%d,%d,%d\n",
+                sensor_data->angle,
+                sensor_data->distance / 10.0,
+                sensor_data->bumpLeft,
+                sensor_data->bumpRight,
+                sensor_data->cliffLeftSignal,
+                sensor_data->cliffFrontLeftSignal,
+                sensor_data->cliffRightSignal,
+                sensor_data->cliffFrontRightSignal
+            );
             sendUartString(uartTX);
         }
 
@@ -78,7 +86,7 @@ void main() {
                     inAction = false;
                 } else
                 {
-                    oi_setWheels(100, 100);
+                    oi_setWheels(50, 50);
                     inAction = true;
                 }
                 break;
@@ -91,7 +99,7 @@ void main() {
                     inAction = false;
                 } else
                 {
-                    oi_setWheels(-100, -100);
+                    oi_setWheels(-50, -50);
                     inAction = true;
                 }
                 break;
@@ -104,7 +112,7 @@ void main() {
                     inAction = false;
                 } else
                 {
-                    oi_setWheels(100, -100);
+                    oi_setWheels(50, -50);
                     inAction = true;
                 }
                 break;
@@ -117,7 +125,7 @@ void main() {
                     inAction = false;
                 } else
                 {
-                    oi_setWheels(-100, 100);
+                    oi_setWheels(-50, 50);
                     inAction = true;
                 }
                 break;
