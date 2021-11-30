@@ -337,6 +337,14 @@ screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
 ScanData = []
 obstacle_grid = Grid()
 
+try:
+    cybot_uart = uart.UartConnection()
+    player = Player()
+    stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
+    stream.daemon = True
+    stream.start()
+except serial.serialutil.SerialException:
+    sys.exit()
 
 #PLEASE PUT IN A MAIN FUNCTION LIKE ABOVE
 running = True
