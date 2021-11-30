@@ -167,6 +167,8 @@ class Player():
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
         if ir < 100:
             ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
+            
+            #Add a new obstacle in the grid at calculated coordinates
             obstacle_grid[self.x+irx+offsetx][self.y+iry+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety)
             
         
@@ -178,6 +180,11 @@ class Point():
         self.pg = [pg,[pgx,pgy]]
 
 class Obstacle():
+    '''
+    This represents an obstacle in the field.
+
+    TODO: Add width of object, whether large or small
+    '''
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -187,7 +194,16 @@ class Obstacle():
     def __repr__(self):
         return self.__str__()
 
+
 class Grid(list):
+    '''
+    Class for transparently working on the grid.
+
+    Acts similar to 2d list. If grid[a] does not exist, the inner list is automatically created
+    Index into the grid like so: grid[x][y].
+    If no obstacle exists at (x,y), returns None.
+    '''
+
     def __init__(self, near_threshold=5, outer=True):
         super().__init__(self)
         self.grid_dict = {}
@@ -221,10 +237,13 @@ class Cliff():
     """class to hold cliff data"""
 
     def __init__(self,cliff,x,y,dX,dY):
+        #TODO: add pit visualization to gui
         if cliff > 2000:
             self.color = WHITE
-        else:
+        elif cliff < 500:
             self.color = BLACK
+        else:
+            self.color = GREY
 
         self.x = x
         self.y = y
@@ -235,7 +254,9 @@ class Cliff():
 
 
 def main():
-
+    '''
+    Main function, will be called if __name__ == "__main__"
+    '''
     
 
     
@@ -383,8 +404,11 @@ while running:
         mode_text = font.render("mode: auto", False, WHITE)
     screen.blit(mode_text,(0,0))
 
-    for x in range(len(ScanData)):
-        pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
-        pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+    for obstacle in obstacle_grid.get_obstacles():
+            pygame.draw.circle(screen, PURPLE, [obstacle.x, obstacle.y], 1)
+
+    #for x in range(len(ScanData)):
+        #pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
+        #pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
 
     pygame.display.flip()
