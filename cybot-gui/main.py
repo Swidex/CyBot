@@ -122,50 +122,30 @@ class Player():
     def forward(self):
         """move forward until not estimating"""
         self.estimating = True
-        dist = 0
         cybot_uart.send_data('w')
-        while self.estimating:
-            self.update(0, avg(move_avg) / 4)
-            dist -= avg(move_avg) / 4
-            time.sleep(0.25)
+        while self.estimating: continue
         cybot_uart.send_data('w')
-        self.update(0, dist)
 
     def back(self):
         """move backward until not estimating"""
         self.estimating = True
-        dist = 0
         cybot_uart.send_data('s')
-        while self.estimating:
-            self.update(0, (-1)*avg(move_avg) / 4)
-            dist += avg(move_avg) / 4
-            time.sleep(0.25)
+        while self.estimating: continue
         cybot_uart.send_data('s')
-        self.update(0, dist)
 
     def left(self):
         """turn left until not estimating"""
         self.estimating = True
-        angle = 0
         cybot_uart.send_data('a')
-        while self.estimating:
-            self.update(avg(turn_avg) / 4, 0)
-            angle -= avg(turn_avg) / 4
-            time.sleep(.25)
+        while self.estimating: continue
         cybot_uart.send_data('a')
-        self.update(angle, 0)
 
     def right(self):
         """turn right until not estimating"""
         self.estimating = True
-        angle = 0
         cybot_uart.send_data('d')
-        while self.estimating:
-            self.update((-1)*avg(turn_avg) / 4, 0)
-            angle += avg(turn_avg) / 4
-            time.sleep(.25)
+        while self.estimating: continue
         cybot_uart.send_data('d')
-        self.update(angle, 0)
 
     def clear(self):
         self.x = SCREEN_WIDTH / 2

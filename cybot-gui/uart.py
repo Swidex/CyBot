@@ -22,6 +22,6 @@ class UartConnection:
     def send_data(self,data):
         for x in range(len(data)):
             self.ser.write(bytes(data[x], 'ascii'))
-            time.sleep(0.1) # wait 1 ms
+            #time.sleep(0.1) # wait 1 ms
 
         
