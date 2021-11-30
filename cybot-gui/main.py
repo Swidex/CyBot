@@ -70,6 +70,29 @@ class Player():
         self.y += y
         self.rect = pygame.Rect(self.x-(self.size/2),self.y-(self.size/2),self.size,self.size)
 
+    def calibrate_move_estimation(self):
+        """take 10 samples of distance traveled in 1 seconds"""
+        print("Now calibrating front and backwards movement...")
+        for _ in range(10):
+            x, y = self.x, self.y
+            cybot_uart.send_data('w')
+            time.sleep(1)
+            cybot_uart.send_data('w')
+            move_avg.append(get_dist(x,self.x,y,self.y))
+        print("Complete!")
+        self.calibrate_turn_estimation()
+
+    def calibrate_turn_estimation(self):
+        """take 10 samples of distance traveled in 1 seconds"""
+        print("Now calibrating turning movement...")
+        for _ in range(10):
+            rot = self.rot
+            cybot_uart.send_data('a')
+            time.sleep(1)
+            cybot_uart.send_data('a')
+            turn_avg.append(abs(self.rot - rot))
+        print("Calibration Complete!")
+
     def calibrate_ir(self):
         """calibrate ir sensor w/ ping sensor"""
         print("Calibrating IR sensors...")
@@ -96,30 +119,50 @@ class Player():
     def forward(self):
         """move forward until not estimating"""
         self.estimating = True
+        dist = 0
         cybot_uart.send_data('w')
-        while self.estimating: continue
+        while self.estimating:
+            self.update(0, avg(move_avg) / 4)
+            dist -= avg(move_avg) / 4
+            time.sleep(0.25)
         cybot_uart.send_data('w')
+        self.update(0, dist)
 
     def back(self):
         """move backward until not estimating"""
         self.estimating = True
+        dist = 0
         cybot_uart.send_data('s')
-        while self.estimating: continue
+        while self.estimating:
+            self.update(0, (-1)*avg(move_avg) / 4)
+            dist += avg(move_avg) / 4
+            time.sleep(0.25)
         cybot_uart.send_data('s')
+        self.update(0, dist)
 
     def left(self):
         """turn left until not estimating"""
         self.estimating = True
+        angle = 0
         cybot_uart.send_data('a')
-        while self.estimating: continue
+        while self.estimating:
+            self.update(avg(turn_avg) / 4, 0)
+            angle -= avg(turn_avg) / 4
+            time.sleep(.25)
         cybot_uart.send_data('a')
+        self.update(angle, 0)
 
     def right(self):
         """turn right until not estimating"""
         self.estimating = True
+        angle = 0
         cybot_uart.send_data('d')
-        while self.estimating: continue
+        while self.estimating:
+            self.update((-1)*avg(turn_avg) / 4, 0)
+            angle += avg(turn_avg) / 4
+            time.sleep(.25)
         cybot_uart.send_data('d')
+        self.update(angle, 0)
 
     def clear(self):
         self.x = SCREEN_WIDTH / 2
@@ -127,6 +170,7 @@ class Player():
         self.rot = 0
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
         ScanData.clear()
+
 
     def scan(self,theta,ir,pg):
         """scan 180 degrees infront"""
@@ -140,6 +184,8 @@ class Player():
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
         if ir < 100:
             ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
+            obstacle_grid[self.x+irx+offsetx][self.y+iry+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety)
+            
         
 
 class Point():
@@ -149,82 +195,135 @@ class Point():
         self.ir = [ir,[irx,iry]]
         self.pg = [pg,[pgx,pgy]]
 
-# try to initalize serial connection
-try:
-    cybot_uart = uart.UartConnection()
-    player = Player()
-    stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
-    stream.daemon = True
-    stream.start()
-except serial.serialutil.SerialException:
-    sys.exit()
+class Obstacle():
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    def __str__(self):
+        return "Obstacle(" + str(self.x) + ", " + str(self.y) + ")"
+
+    def __repr__(self):
+        return self.__str__()
+
+class Grid(list):
+    def __init__(self, near_threshold=5, outer=True):
+        super().__init__(self)
+        self.grid_dict = {}
+        self.near_threshold = near_threshold
+        self.outer = outer
+
+    def get_obstacles(self):
+        obstacles = []
+        for row in self.grid_dict.values():
+            for obst in row.grid_dict.values():
+                obstacles.append(obst)
+        return obstacles
+
+    def clear(self):
+        del self.grid_dict
+        self.grid_dict = {}
+
+    def __getitem__(self, key):
+        try:
+            return self.grid_dict[key]
+        except KeyError:
+            if(self.outer):
+                self.grid_dict[key] = Grid(outer=False)
+                return self.grid_dict[key]
+            return None
+
+    def __setitem__(self, key, newval):
+        self.grid_dict[key] = newval
 
 # initalize pygame
 pygame.init()
 font = pygame.font.SysFont('Segoe UI', 30)
 screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
 ScanData = []
+obstacle_grid = Grid()
 RenderedScan = []
 
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            try:
-                sys.exit()
-            finally:
-                main = False
+def main():
 
-        if event.type == pygame.KEYDOWN:
-            if event.key == ord('a'): # turn left
-                threading.Thread(target=player.left).start()
-            if event.key == ord('d'): # turn right
-                threading.Thread(target=player.right).start()
-            if event.key == ord('w'): # move forward
-                threading.Thread(target=player.forward).start()
-            if event.key == ord('s'): # move backwards
-                threading.Thread(target=player.back).start()
-            if event.key == ord('m'): # scan once
-                cybot_uart.send_data("m")
-            if event.key == ord('n'): # radial scan
-                cybot_uart.send_data("n")
-            if event.key == ord('c'): # calibrate
-                threading.Thread(target=player.calibrate_ir).start()
-            if event.key == ord('f'): # apply calibration settings
-                line_of_best_fit()
-            if event.key == ord('k'): # clear scan data
-                ScanData.clear()
-            if event.key == ord('r'): # reset cybot location
-                pass
-        elif event.type == pygame.KEYUP:
-            player.estimating = False
+    # try to initalize serial connection
+    try:
+        cybot_uart = uart.UartConnection()
+        player = Player()
+        stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
+        stream.daemon = True
+        stream.start()
+    except serial.serialutil.SerialException:
+        print("No serial connection")
+        sys.exit()
 
-    # fill background
-    screen.fill(BLACK)
+    
 
-    # draw cybot
-    xe, ye = polar_to_cart(player.rot + player.servo_pos - 90, player.size / 2)
-    pygame.draw.circle(screen, WHITE, (player.x, player.y), player.size / 2)
-    pygame.draw.arc(screen, GREEN, player.rect, math.radians(player.rot-180), math.radians(player.rot), 10)
-    pygame.draw.line(screen, BLUE, (player.x, player.y), (player.x + xe, player.y + ye), 5)
-    bump_text = font.render("bumper: " + player.bumper, False, WHITE)
-    screen.blit(bump_text,(0,40))
-    pos_text = font.render(str(round(player.x - (SCREEN_WIDTH / 2), 2)) + ", " + str(round(player.y - (SCREEN_HEIGHT / 2),2)) + ", " + str(round(player.rot,2)), False, WHITE)
-    screen.blit(pos_text,(0,80))
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                try:
+                    sys.exit()
+                finally:
+                    main = False
 
-    if player.manual:
-        mode_text = font.render("mode: manual", False, WHITE)
-    else:
-        mode_text = font.render("mode: auto", False, WHITE)
-    screen.blit(mode_text,(0,0))
+            if event.type == pygame.KEYDOWN:
+                if event.key == ord('a'): # turn left
+                    threading.Thread(target=player.left).start()
+                if event.key == ord('d'): # turn right
+                    threading.Thread(target=player.right).start()
+                if event.key == ord('w'): # move forward
+                    threading.Thread(target=player.forward).start()
+                if event.key == ord('s'): # move backwards
+                    threading.Thread(target=player.back).start()
+                if event.key == ord('m'): # scan once
+                    cybot_uart.send_data("m")
+                if event.key == ord('n'): # radial scan
+                    cybot_uart.send_data("n")
+                if event.key == ord('c'): # calibrate
+                    threading.Thread(target=player.calibrate_ir, daemon=True).start()
+                if event.key == ord('f'): # apply calibration settings
+                    line_of_best_fit()
+                if event.key == ord('k'): # clear scan data
+                    ScanData.clear()
+                if event.key == ord('r'): # reset cybot location
+                    pass
+            elif event.type == pygame.KEYUP:
+                player.estimating = False
 
-    RenderedScan.clear()
-    start = 0
-    end = 0
-    for x in range(len(ScanData)):
-        pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
-        pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+        # fill background
+        screen.fill(BLACK)
+
+        # draw cybot
+        xe, ye = polar_to_cart(player.rot + player.servo_pos - 90, player.size / 2)
+        pygame.draw.circle(screen, WHITE, (player.x, player.y), player.size / 2)
+        pygame.draw.arc(screen, GREEN, player.rect, math.radians(player.rot-180), math.radians(player.rot), 10)
+        pygame.draw.line(screen, BLUE, (player.x, player.y), (player.x + xe, player.y + ye), 5)
+        bump_text = font.render("bumper: " + player.bumper, False, WHITE)
+        screen.blit(bump_text,(0,40))
+        pos_text = font.render(str(round(player.x - (SCREEN_WIDTH / 2), 2)) + ", " + str(round(player.y - (SCREEN_HEIGHT / 2),2)) + ", " + str(round(player.rot,2)), False, WHITE)
+        screen.blit(pos_text,(0,80))
+
+        if player.manual:
+            mode_text = font.render("mode: manual", False, WHITE)
+        else:
+            mode_text = font.render("mode: auto", False, WHITE)
+        screen.blit(mode_text,(0,0))
+
+        RenderedScan.clear()
+        start = 0
+        end = 0
+        #for x in range(len(ScanData)):
+            #pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
+            #pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+        for obstacle in obstacle_grid.get_obstacles():
+            pygame.draw.circle(screen, PURPLE, [obstacle.x, obstacle.y], 1)
 
 
-    pygame.display.flip()
+        pygame.display.flip()
+
+
+
+
+main()
