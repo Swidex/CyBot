@@ -6,6 +6,7 @@ from scipy.optimize import curve_fit
 BLUE = (25, 25, 200)
 PURPLE = (150, 25, 200)
 BLACK = (23, 23, 23)
+GREY = (56, 56, 56)
 WHITE = (254, 254, 254)
 RED = (200, 25, 25)
 GREEN = (25, 200, 25)
@@ -21,6 +22,7 @@ pg_cal = [16.12, 22.64, 27.04, 31.84, 7.79, 11.29, 14.86, 19.04, 23.14, 26.72, 2
 COEFF = 3082
 PWR = -0.748
 IR_RAW = 0
+CliffData = []
 
 def polar_to_cart(deg, amt):
     """convert polar coordinates to cartesian"""
@@ -58,40 +60,41 @@ class Player():
         self.size = 34.8 * CM_TO_PX
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
         self.manual = True
-        self.bumper = ""
+        self.lBump = ""
+        self.rBump = ""
         self.estimating = False
 
-    def update(self, angle, dist):
+    def update(self, angle, dist, lBump, rBump, lCliff, lfCliff, rCliff, rfCliff):
         """update position info"""
         self.rot += angle
 
+        # movement handling
         x, y = polar_to_cart(self.rot, dist * CM_TO_PX)
         self.x += x
         self.y += y
         self.rect = pygame.Rect(self.x-(self.size/2),self.y-(self.size/2),self.size,self.size)
 
-    def calibrate_move_estimation(self):
-        """take 10 samples of distance traveled in 1 seconds"""
-        print("Now calibrating front and backwards movement...")
-        for _ in range(10):
-            x, y = self.x, self.y
-            cybot_uart.send_data('w')
-            time.sleep(1)
-            cybot_uart.send_data('w')
-            move_avg.append(get_dist(x,self.x,y,self.y))
-        print("Complete!")
-        self.calibrate_turn_estimation()
+        # bumper handling
+        self.lBump = "l" if lBump == 1 else ""
+        self.rBump = "r" if rBump == 1 else ""
 
-    def calibrate_turn_estimation(self):
-        """take 10 samples of distance traveled in 1 seconds"""
-        print("Now calibrating turning movement...")
-        for _ in range(10):
-            rot = self.rot
-            cybot_uart.send_data('a')
-            time.sleep(1)
-            cybot_uart.send_data('a')
-            turn_avg.append(abs(self.rot - rot))
-        print("Calibration Complete!")
+        # cliff handling
+        if lCliff > 2500 or lCliff < 1400:
+            # cliff on left sensor detected
+            tx, ty = polar_to_cart(self.rot - 45, self.size / 1.5)
+            CliffData.append(Cliff(lCliff,self.x + tx,self.y + ty,self.x,self.y))
+        if lfCliff > 2500 or lfCliff < 1400:
+            # cliff on left front sensor detected
+            tx, ty = polar_to_cart(self.rot - 15, self.size / 1.5)
+            CliffData.append(Cliff(lfCliff,self.x + tx,self.y + ty,self.x,self.y))
+        if rCliff > 2500 or rCliff < 1400:
+            # cliff on right sensor detected
+            tx, ty = polar_to_cart(self.rot + 45, self.size / 1.5)
+            CliffData.append(Cliff(rCliff,self.x + tx,self.y + ty,self.x,self.y))
+        if rfCliff > 2500 or rfCliff < 1400:
+            # cliff on right front sensor detected
+            tx, ty = polar_to_cart(self.rot + 15, self.size / 1.5)
+            CliffData.append(Cliff(rfCliff,self.x + tx,self.y + ty,self.x,self.y))
 
     def calibrate_ir(self):
         """calibrate ir sensor w/ ping sensor"""
@@ -187,7 +190,6 @@ class Player():
             obstacle_grid[self.x+irx+offsetx][self.y+iry+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety)
             
         
-
 class Point():
     """class to hold scan data"""
 
@@ -235,26 +237,26 @@ class Grid(list):
     def __setitem__(self, key, newval):
         self.grid_dict[key] = newval
 
-# initalize pygame
-pygame.init()
-font = pygame.font.SysFont('Segoe UI', 30)
-screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
-ScanData = []
-obstacle_grid = Grid()
-RenderedScan = []
+class Cliff():
+    """class to hold cliff data"""
+
+    def __init__(self,cliff,x,y,dX,dY):
+        if cliff > 2000:
+            self.color = WHITE
+        else:
+            self.color = BLACK
+
+        self.x = x
+        self.y = y
+        self.dx = dX
+        self.dy = dY
+
+
+
 
 def main():
 
-    # try to initalize serial connection
-    try:
-        cybot_uart = uart.UartConnection()
-        player = Player()
-        stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
-        stream.daemon = True
-        stream.start()
-    except serial.serialutil.SerialException:
-        print("No serial connection")
-        sys.exit()
+    
 
     
 
@@ -326,4 +328,75 @@ def main():
 
 
 
-main()
+#main()
+
+# initalize pygame
+pygame.init()
+font = pygame.font.SysFont('Segoe UI', 30)
+screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
+ScanData = []
+obstacle_grid = Grid()
+
+
+#PLEASE PUT IN A MAIN FUNCTION LIKE ABOVE
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            try:
+                sys.exit()
+            finally:
+                main = False
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == ord('a'): # turn left
+                threading.Thread(target=player.left).start()
+            if event.key == ord('d'): # turn right
+                threading.Thread(target=player.right).start()
+            if event.key == ord('w'): # move forward
+                threading.Thread(target=player.forward).start()
+            if event.key == ord('s'): # move backwards
+                threading.Thread(target=player.back).start()
+            if event.key == ord('m'): # scan once
+                cybot_uart.send_data("m")
+            if event.key == ord('n'): # radial scan
+                cybot_uart.send_data("n")
+            if event.key == ord('c'): # calibrate
+                threading.Thread(target=player.calibrate_ir).start()
+            if event.key == ord('f'): # apply calibration settings
+                line_of_best_fit()
+            if event.key == ord('k'): # clear scan data
+                ScanData.clear()
+            if event.key == ord('r'): # reset cybot location
+                pass
+        elif event.type == pygame.KEYUP:
+            player.estimating = False
+
+    # fill background
+    screen.fill(GREY)
+
+    for cliff in CliffData:
+        pygame.draw.circle(screen, cliff.color, (cliff.x, cliff.y), 10)
+
+    # draw cybot
+    xe, ye = polar_to_cart(player.rot + player.servo_pos - 90, player.size / 2)
+    pygame.draw.circle(screen, WHITE, (player.x, player.y), player.size / 2)
+    pygame.draw.arc(screen, GREEN, player.rect, math.radians(player.rot-180), math.radians(player.rot), 10)
+    pygame.draw.line(screen, BLUE, (player.x, player.y), (player.x + xe, player.y + ye), 5)
+    bump_text = font.render("bumper: " + player.lBump + player.rBump, False, WHITE)
+    screen.blit(bump_text,(0,40))
+    pos_text = font.render(str(round(player.x - (SCREEN_WIDTH / 2), 2)) + ", " + str(round(player.y - (SCREEN_HEIGHT / 2),2)) + ", " + str(round(player.rot,2)), False, WHITE)
+    screen.blit(pos_text,(0,80))
+
+    if player.manual:
+        mode_text = font.render("mode: manual", False, WHITE)
+    else:
+        mode_text = font.render("mode: auto", False, WHITE)
+    screen.blit(mode_text,(0,0))
+
+    for x in range(len(ScanData)):
+        pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
+        pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+
+    pygame.display.flip()
