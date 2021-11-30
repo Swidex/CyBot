@@ -7,30 +7,10 @@
 
 #include "feedback.h"
 #include "lcd.h"
+#include "button.h"
 
-void button_init() {
-    SYSCTL_RCGCGPIO_R |=0b00010000;
-    GPIO_PORTE_DIR_R &=0xF0;
-    GPIO_PORTE_DEN_R |=0x0F;
-}
 
-uint8_t button_getButton() {
-    if(!(GPIO_PORTE_DATA_R&0b00001000)){
-        return 4;
-    }
-    else if(!(GPIO_PORTE_DATA_R&0b00000100)){
-        return 3;
-    }
-    else if(!(GPIO_PORTE_DATA_R&0b00000010)){
-            return 2;
-        }
-    else if(!(GPIO_PORTE_DATA_R&0b00000001)){
-            return 1;
-        }
-    return 0;
-}
-
-char feedback(){
+char* feedback(){
     button_init();
     lcd_init();
     char hello[100];

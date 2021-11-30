@@ -12,11 +12,8 @@
 #include <stdint.h>
 #include <inc/tm4c123gh6pm.h>
 
-void button_init();
 
-uint8_t button_getButton();
-
-char feedback();
+char* feedback();
 
 
 #endif /* FEEDBACK_H_ */
