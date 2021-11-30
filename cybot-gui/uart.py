@@ -5,7 +5,7 @@ class UartConnection:
         self.real_cybot = "socket://192.168.1.1:288"
         self.sim = "socket:10.24.85.217:50000"
         """establish UART connection to cyBot and read output"""
-        self.ser = serial.serial_for_url(self.sim, baudrate=115200)
+        self.ser = serial.serial_for_url(self.real_cybot, baudrate=115200)
         self.waiting = False
 
     def data_stream(self, player):

@@ -243,18 +243,20 @@ ScanData = []
 obstacle_grid = Grid()
 RenderedScan = []
 
+# try to initalize serial connection
+try:
+    cybot_uart = uart.UartConnection()
+    player = Player()
+    stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
+    stream.daemon = True
+    stream.start()
+except serial.serialutil.SerialException:
+    print("No serial connection")
+    sys.exit()
+
 def main():
 
-    # try to initalize serial connection
-    try:
-        cybot_uart = uart.UartConnection()
-        player = Player()
-        stream = threading.Thread(target=cybot_uart.data_stream, args=[player])
-        stream.daemon = True
-        stream.start()
-    except serial.serialutil.SerialException:
-        print("No serial connection")
-        sys.exit()
+    
 
     
 
