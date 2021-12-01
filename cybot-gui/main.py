@@ -64,7 +64,7 @@ class Player():
         self.rBump = ""
         self.estimating = False
 
-    def update(self, angle, dist, lBump, rBump, lCliff, lfCliff, rCliff, rfCliff):
+    def update(self, angle, dist, lBump, rBump):
         """update position info"""
         self.rot += angle
 
@@ -78,23 +78,37 @@ class Player():
         self.lBump = "l" if lBump == 1 else ""
         self.rBump = "r" if rBump == 1 else ""
 
+    def cliff(self, cliffVal) :
         # cliff handling
-        if lCliff > 2500 or lCliff < 1400:
-            # cliff on left sensor detected
-            tx, ty = polar_to_cart(self.rot - 45, self.size / 1.5)
-            CliffData.append(Cliff(lCliff,self.x + tx,self.y + ty,self.x,self.y))
-        if lfCliff > 2500 or lfCliff < 1400:
-            # cliff on left front sensor detected
-            tx, ty = polar_to_cart(self.rot - 15, self.size / 1.5)
-            CliffData.append(Cliff(lfCliff,self.x + tx,self.y + ty,self.x,self.y))
-        if rCliff > 2500 or rCliff < 1400:
-            # cliff on right sensor detected
-            tx, ty = polar_to_cart(self.rot + 45, self.size / 1.5)
-            CliffData.append(Cliff(rCliff,self.x + tx,self.y + ty,self.x,self.y))
-        if rfCliff > 2500 or rfCliff < 1400:
-            # cliff on right front sensor detected
-            tx, ty = polar_to_cart(self.rot + 15, self.size / 1.5)
-            CliffData.append(Cliff(rfCliff,self.x + tx,self.y + ty,self.x,self.y))
+        lx, ly = polar_to_cart(self.rot - 45, self.size / 1.5)
+        flx, fly = polar_to_cart(self.rot - 15, self.size / 1.5)
+        rx, ry = polar_to_cart(self.rot + 45, self.size / 1.5)
+        frx, fry = polar_to_cart(self.rot + 15, self.size / 1.5)
+
+        if cliffVal & 0b1:
+            # l high
+            CliffData.append(Cliff(True,self.x + lx,self.y + ly,self.x,self.y))
+        if cliffVal & 0b10:
+            # l low
+            CliffData.append(Cliff(False,self.x + lx,self.y + ly,self.x,self.y))
+        if cliffVal >> 2 & 0b1:
+            # lf high
+            CliffData.append(Cliff(True,self.x + flx,self.y + fly,self.x,self.y))
+        if cliffVal >> 2 & 0b10:
+            # lf low
+            CliffData.append(Cliff(False,self.x + flx,self.y + fly,self.x,self.y))
+        if cliffVal >> 4 & 0b1:
+            # r high
+            CliffData.append(Cliff(True,self.x + rx,self.y + ry,self.x,self.y))
+        if cliffVal >> 4 & 0b10:
+            # r low
+            CliffData.append(Cliff(False,self.x + rx,self.y + ry,self.x,self.y))
+        if cliffVal >> 8 & 0b1:
+            # rf high
+            CliffData.append(Cliff(True,self.x + frx,self.y + fry,self.x,self.y))
+        if cliffVal >> 8 & 0b10:
+            # rf low
+            CliffData.append(Cliff(False,self.x + frx,self.y + fry,self.x,self.y))
 
     def calibrate_ir(self):
         """calibrate ir sensor w/ ping sensor"""
@@ -166,18 +180,8 @@ class Player():
         pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, pg * CM_TO_PX)
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
         if ir < 100:
-            ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
-            
             #Add a new obstacle in the grid at calculated coordinates
-            obstacle_grid[self.x+irx+offsetx][self.y+iry+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety)
-            
-        
-class Point():
-    """class to hold scan data"""
-
-    def __init__(self,irx,iry,pgx,pgy,ir,pg):
-        self.ir = [ir,[irx,iry]]
-        self.pg = [pg,[pgx,pgy]]
+            obstacle_grid[self.x+pgx+offsetx][self.y+pgy+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety)
 
 class Obstacle():
     '''
@@ -185,11 +189,13 @@ class Obstacle():
 
     TODO: Add width of object, whether large or small
     '''
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
+    def __init__(self, ix, iy, px, py):
+        self.ix = ix
+        self.iy = iy
+        self.px = px
+        self.py = py
     def __str__(self):
-        return "Obstacle(" + str(self.x) + ", " + str(self.y) + ")"
+        return "Obstacle(" + str(self.px) + ", " + str(self.py) + ")"
 
     def __repr__(self):
         return self.__str__()
@@ -204,11 +210,13 @@ class Grid(list):
     If no obstacle exists at (x,y), returns None.
     '''
 
-    def __init__(self, near_threshold=5, outer=True):
+    def __init__(self, near_threshold=5, outer=True, container=None):
         super().__init__(self)
         self.grid_dict = {}
         self.near_threshold = near_threshold
         self.outer = outer
+        self.container = container
+        self.points = []
 
     def get_obstacles(self):
         obstacles = []
@@ -226,40 +234,42 @@ class Grid(list):
             return self.grid_dict[key]
         except KeyError:
             if(self.outer):
-                self.grid_dict[key] = Grid(outer=False)
+                self.grid_dict[key] = Grid(outer=False, container = self)
                 return self.grid_dict[key]
             return None
 
     def __setitem__(self, key, newval):
-        self.grid_dict[key] = newval
+        if(not self.outer):
+            x = newval.px
+            y = newval.py
+            for i in range(int(x - self.near_threshold), int(x + self.near_threshold)):
+                for j in range(int(y - self.near_threshold), int(y + self.near_threshold)):
+                    if self.container[i][j] != None:
+                        self.container[i][j].points.append((newval.px, newval.py))
+                        return
+
+            #If no near obstacle found, add to grid
+            self.grid_dict[key] = newval
 
 class Cliff():
     """class to hold cliff data"""
 
     def __init__(self,cliff,x,y,dX,dY):
         #TODO: add pit visualization to gui
-        if cliff > 2000:
-            self.color = WHITE
-        elif cliff < 500:
+        if cliff:
             self.color = BLACK
         else:
-            self.color = GREY
+            self.color = WHITE
 
         self.x = x
         self.y = y
         self.dx = dX
         self.dy = dY
 
-
-
-
 def main():
     '''
     Main function, will be called if __name__ == "__main__"
     '''
-    
-
-    
 
     running = True
     while running:
@@ -317,24 +327,17 @@ def main():
         RenderedScan.clear()
         start = 0
         end = 0
-        #for x in range(len(ScanData)):
-            #pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
-            #pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
         for obstacle in obstacle_grid.get_obstacles():
             pygame.draw.circle(screen, PURPLE, [obstacle.x, obstacle.y], 1)
 
-
         pygame.display.flip()
-
-
-
 
 #main()
 
 # initalize pygame
 pygame.init()
 font = pygame.font.SysFont('Segoe UI', 30)
-screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 ScanData = []
 obstacle_grid = Grid()
 
@@ -405,10 +408,7 @@ while running:
     screen.blit(mode_text,(0,0))
 
     for obstacle in obstacle_grid.get_obstacles():
-            pygame.draw.circle(screen, PURPLE, [obstacle.x, obstacle.y], 1)
-
-    #for x in range(len(ScanData)):
-        #pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
-        #pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+            pygame.draw.circle(screen, RED, [obstacle.px, obstacle.py], 1)
+            print(obstacle)
 
     pygame.display.flip()

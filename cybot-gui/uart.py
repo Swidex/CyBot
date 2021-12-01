@@ -15,9 +15,11 @@ class UartConnection:
             print(data)
 
             if int(data[0]) == 0:
-                player.update(float(data[1]), float(data[2]), int(data[3]), int(data[4]), int(data[5]), int(data[6]), int(data[7]), int(data[8]))
+                player.update(float(data[1]), float(data[2]), int(data[3]), int(data[4]))
             elif int(data[0]) == 1:
                 player.scan(float(data[1]),float(data[2]),float(data[3]))
+            elif int(data[0]) == 2:
+                player.cliff(int(data[1]))
 
     def send_data(self,data):
         for x in range(len(data)):
