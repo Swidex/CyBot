@@ -10,6 +10,8 @@
 #include "adc.h"
 #include "ping.h"
 #include "servo.h"
+#include "Sound.h"
+#include "cliff.h"
 
 #define PING_MOD 969.33
 
@@ -36,6 +38,10 @@ void main() {
     oi_t *sensor_data = oi_alloc();
     oi_init(sensor_data);
 
+    unsigned int lastCliffData = 0b00000000;
+
+    int lBumpLast = 0;
+    int rBumpLast = 0;
     bool inAction = false;
     char uartRX;                // var to hold uart RX data
     char uartTX[100] = "";       // string to hold uart TX data
@@ -46,28 +52,30 @@ void main() {
     while(1)
     {
 
+        unsigned int cliffData = updateCliffStatus(sensor_data);
+        if (cliffData != lastCliffData && cliffData != 0b00000000) {
+            oi_setWheels(-50, -50);
+            play_sound(2);
+            timer_waitMillis(50);
+            oi_setWheels(0, 0);
+            lastCliffData = cliffData;
+            sprintf(uartTX,"2,%d", cliffData);
+            sendUartString(uartTX);
+        }
+
         if (sensor_data->angle != 0 ||
             sensor_data->distance != 0 ||
-            sensor_data->bumpLeft != 0 ||
-            sensor_data->bumpRight != 0 ||
-            sensor_data->cliffFrontLeftSignal > 2500 ||
-            sensor_data->cliffFrontLeftSignal < 1500 ||
-            sensor_data->cliffLeftSignal > 2500 ||
-            sensor_data->cliffLeftSignal < 1500 ||
-            sensor_data->cliffFrontRightSignal > 2500 ||
-            sensor_data->cliffFrontRightSignal < 1500 ||
-            sensor_data->cliffRightSignal > 2500 ||
-            sensor_data->cliffRightSignal < 1500)
+            sensor_data->bumpLeft != lBumpLast ||
+            sensor_data->bumpRight != rBumpLast
+         )
         {
-            sprintf(uartTX,"0,%0.2f,%0.2f,%d,%d,%d,%d,%d,%d\n",
+            lBumpLast = sensor_data->bumpLeft;
+            rBumpLast = sensor_data->bumpRight;
+            sprintf(uartTX,"0,%0.2f,%0.2f,%d,%d\n",
                 sensor_data->angle,
                 sensor_data->distance / 10.0,
                 sensor_data->bumpLeft,
-                sensor_data->bumpRight,
-                sensor_data->cliffLeftSignal,
-                sensor_data->cliffFrontLeftSignal,
-                sensor_data->cliffRightSignal,
-                sensor_data->cliffFrontRightSignal
+                sensor_data->bumpRight
             );
             sendUartString(uartTX);
         }
