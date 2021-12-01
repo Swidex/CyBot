@@ -154,6 +154,7 @@ class Player():
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
         ScanData.clear()
 
+
     def scan(self,theta,ir,pg):
         """scan 180 degrees infront"""
         global IR_RAW
@@ -166,6 +167,10 @@ class Player():
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
         if ir < 100:
             ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
+            
+            #Add a new obstacle in the grid at calculated coordinates
+            obstacle_grid[self.x+irx+offsetx][self.y+iry+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety)
+            
         
 class Point():
     """class to hold scan data"""
@@ -174,21 +179,165 @@ class Point():
         self.ir = [ir,[irx,iry]]
         self.pg = [pg,[pgx,pgy]]
 
+class Obstacle():
+    '''
+    This represents an obstacle in the field.
+
+    TODO: Add width of object, whether large or small
+    '''
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    def __str__(self):
+        return "Obstacle(" + str(self.x) + ", " + str(self.y) + ")"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class Grid(list):
+    '''
+    Class for transparently working on the grid.
+
+    Acts similar to 2d list. If grid[a] does not exist, the inner list is automatically created
+    Index into the grid like so: grid[x][y].
+    If no obstacle exists at (x,y), returns None.
+    '''
+
+    def __init__(self, near_threshold=5, outer=True):
+        super().__init__(self)
+        self.grid_dict = {}
+        self.near_threshold = near_threshold
+        self.outer = outer
+
+    def get_obstacles(self):
+        obstacles = []
+        for row in self.grid_dict.values():
+            for obst in row.grid_dict.values():
+                obstacles.append(obst)
+        return obstacles
+
+    def clear(self):
+        del self.grid_dict
+        self.grid_dict = {}
+
+    def __getitem__(self, key):
+        try:
+            return self.grid_dict[key]
+        except KeyError:
+            if(self.outer):
+                self.grid_dict[key] = Grid(outer=False)
+                return self.grid_dict[key]
+            return None
+
+    def __setitem__(self, key, newval):
+        self.grid_dict[key] = newval
+
 class Cliff():
     """class to hold cliff data"""
 
     def __init__(self,cliff,x,y,dX,dY):
+        #TODO: add pit visualization to gui
         if cliff > 2000:
             self.color = WHITE
-        else:
+        elif cliff < 500:
             self.color = BLACK
+        else:
+            self.color = GREY
 
         self.x = x
         self.y = y
         self.dx = dX
         self.dy = dY
 
-# try to initalize serial connection
+
+
+
+def main():
+    '''
+    Main function, will be called if __name__ == "__main__"
+    '''
+    
+
+    
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                try:
+                    sys.exit()
+                finally:
+                    main = False
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == ord('a'): # turn left
+                    threading.Thread(target=player.left).start()
+                if event.key == ord('d'): # turn right
+                    threading.Thread(target=player.right).start()
+                if event.key == ord('w'): # move forward
+                    threading.Thread(target=player.forward).start()
+                if event.key == ord('s'): # move backwards
+                    threading.Thread(target=player.back).start()
+                if event.key == ord('m'): # scan once
+                    cybot_uart.send_data("m")
+                if event.key == ord('n'): # radial scan
+                    cybot_uart.send_data("n")
+                if event.key == ord('c'): # calibrate
+                    threading.Thread(target=player.calibrate_ir, daemon=True).start()
+                if event.key == ord('f'): # apply calibration settings
+                    line_of_best_fit()
+                if event.key == ord('k'): # clear scan data
+                    ScanData.clear()
+                if event.key == ord('r'): # reset cybot location
+                    pass
+            elif event.type == pygame.KEYUP:
+                player.estimating = False
+
+        # fill background
+        screen.fill(BLACK)
+
+        # draw cybot
+        xe, ye = polar_to_cart(player.rot + player.servo_pos - 90, player.size / 2)
+        pygame.draw.circle(screen, WHITE, (player.x, player.y), player.size / 2)
+        pygame.draw.arc(screen, GREEN, player.rect, math.radians(player.rot-180), math.radians(player.rot), 10)
+        pygame.draw.line(screen, BLUE, (player.x, player.y), (player.x + xe, player.y + ye), 5)
+        bump_text = font.render("bumper: " + player.bumper, False, WHITE)
+        screen.blit(bump_text,(0,40))
+        pos_text = font.render(str(round(player.x - (SCREEN_WIDTH / 2), 2)) + ", " + str(round(player.y - (SCREEN_HEIGHT / 2),2)) + ", " + str(round(player.rot,2)), False, WHITE)
+        screen.blit(pos_text,(0,80))
+
+        if player.manual:
+            mode_text = font.render("mode: manual", False, WHITE)
+        else:
+            mode_text = font.render("mode: auto", False, WHITE)
+        screen.blit(mode_text,(0,0))
+
+        RenderedScan.clear()
+        start = 0
+        end = 0
+        #for x in range(len(ScanData)):
+            #pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
+            #pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+        for obstacle in obstacle_grid.get_obstacles():
+            pygame.draw.circle(screen, PURPLE, [obstacle.x, obstacle.y], 1)
+
+
+        pygame.display.flip()
+
+
+
+
+#main()
+
+# initalize pygame
+pygame.init()
+font = pygame.font.SysFont('Segoe UI', 30)
+screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
+ScanData = []
+obstacle_grid = Grid()
+
 try:
     cybot_uart = uart.UartConnection()
     player = Player()
@@ -198,12 +347,7 @@ try:
 except serial.serialutil.SerialException:
     sys.exit()
 
-# initalize pygame
-pygame.init()
-font = pygame.font.SysFont('Segoe UI', 30)
-screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
-ScanData = []
-
+#PLEASE PUT IN A MAIN FUNCTION LIKE ABOVE
 running = True
 while running:
     for event in pygame.event.get():
@@ -260,8 +404,11 @@ while running:
         mode_text = font.render("mode: auto", False, WHITE)
     screen.blit(mode_text,(0,0))
 
-    for x in range(len(ScanData)):
-        pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
-        pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
+    for obstacle in obstacle_grid.get_obstacles():
+            pygame.draw.circle(screen, PURPLE, [obstacle.x, obstacle.y], 1)
+
+    #for x in range(len(ScanData)):
+        #pygame.draw.circle(screen, PURPLE, ScanData[x].pg[1], 1)
+        #pygame.draw.circle(screen, RED, ScanData[x].ir[1], 1)
 
     pygame.display.flip()

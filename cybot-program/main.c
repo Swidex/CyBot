@@ -38,7 +38,7 @@ void main() {
 
     bool inAction = false;
     char uartRX;                // var to hold uart RX data
-    char uartTX[20] = "";       // string to hold uart TX data
+    char uartTX[100] = "";       // string to hold uart TX data
 
     lcd_clear();
     lcd_puts("Complete!");
