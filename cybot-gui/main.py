@@ -348,6 +348,7 @@ try:
     stream.daemon = True
     stream.start()
 except serial.serialutil.SerialException:
+    print("No serial connection found")
     sys.exit()
 
 #PLEASE PUT IN A MAIN FUNCTION LIKE ABOVE
