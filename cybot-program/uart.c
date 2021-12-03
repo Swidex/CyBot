@@ -37,8 +37,12 @@ void uart_init(int BAUD_RATE){
 
 // Send a byte over the UART from CyBot and PuTTy (Buad Rate 115200, No Parity, No Flow Control)
 void uart_sendByte(char data){
-    while(UART1_FR_R & 0x20) {} // wait until there is room to send data
-    UART1_DR_R = data;          // send data
+    //    while(UART1_FR_R & 0x20) {} // wait until there is room to send data
+    //    UART1_DR_R = data;          // send data
+
+    while((UART1_FR_R & 0b100000) != 0);
+    UART1_DR_R = data;
+    while((UART1_FR_R & 0b1000) != 0);
 }
 
 void uart_handler() {
@@ -56,10 +60,20 @@ void uart_handler() {
 }
 
 void uart_interrupt_init() {
-    UART1_IM_R |= 0b110000; //enable send and receive raw interrupts
-    NVIC_EN0_R |= 0b1000000; // enable interrupt for IRQ 6 / UART1 interrupt
-    IntRegister(INT_UART1, uart_handler); // tell cpu which func to use as the ISR for UART1
-    IntMasterEnable();
+    //    UART1_IM_R |= 0b110000; //enable send and receive raw interrupts
+    //    NVIC_EN0_R |= 0b1000000; // enable interrupt for IRQ 6 / UART1 interrupt
+    //    IntRegister(INT_UART1, uart_handler); // tell cpu which func to use as the ISR for UART1
+    //    IntMasterEnable();
+
+    // Enable interrupts for receiving bytes through UART1
+    UART1_IM_R |= 0b10000; //enable interrupt on receive - page 924
+    //
+    //    // Find the NVIC enable register and bit responsible for UART1 in table 2-9
+    //    // Note: NVIC register descriptions are found in chapter 3.4
+    NVIC_EN0_R |= 0b1000000; //enable uart1 interrupts - page 104
+    //
+    //    // Find the vector number of UART1 in table 2-9 ! UART1 is 22 from vector number page 104
+    IntRegister(22, uart_handler); //give the microcontroller the address of our interrupt handler - page 104 22 is the vector number
 }
 
 void sendUartString( char msg[] ) {
