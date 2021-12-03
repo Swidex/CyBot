@@ -14,16 +14,34 @@
 #include "cliff.h"
 
 #define PING_MOD 969.33
+#define PIT_MAX 500
+#define FLOOR_MAX 2500
 
 void scanInfront(char* uartTX)
 {
     lcd_clear();
-    sprintf(uartTX, "1,%0.0f,%d,%0.2f\n",servo_pos,adc_read(),ping_read() / PING_MOD);
+
+    double avg_val;
+    int j;
+    for(j=0; j<16; j++)
+    {
+        avg_val += adc_read();
+        timer_waitMillis(1);
+    }
+
+    avg_val /= 16;
+
+
+
+    double ping_val = ping_read();
+
+    sprintf(uartTX, "1,%0.0f,%f,%0.2f\n",servo_pos,avg_val,ping_val / PING_MOD);
     sendUartString(uartTX);
     lcd_puts(uartTX);
 }
 
 void main() {
+    timer_init();
     lcd_init();
     lcd_clear();
     lcd_puts("Initializing...");
@@ -45,10 +63,15 @@ void main() {
     bool inAction = false;
     char uartRX;                // var to hold uart RX data
     char uartTX[100] = "";       // string to hold uart TX data
-
+    char breakStatement = 'p';
+    oi_setWheels(0, 0);
     lcd_clear();
     lcd_puts("Complete!");
 
+
+    // to stop the fucking beeping
+    //    while(receive_data != breakStatement);
+    //    receive_data = '\0';
     while(1)
     {
 
@@ -64,20 +87,39 @@ void main() {
         }
 
         if (sensor_data->angle != 0 ||
-            sensor_data->distance != 0 ||
-            sensor_data->bumpLeft != lBumpLast ||
-            sensor_data->bumpRight != rBumpLast
-         )
+                sensor_data->distance != 0 ||
+                sensor_data->bumpLeft != lBumpLast ||
+                sensor_data->bumpRight != rBumpLast
+        )
         {
             lBumpLast = sensor_data->bumpLeft;
             rBumpLast = sensor_data->bumpRight;
             sprintf(uartTX,"0,%0.2f,%0.2f,%d,%d\n",
-                sensor_data->angle,
-                sensor_data->distance / 10.0,
-                sensor_data->bumpLeft,
-                sensor_data->bumpRight
+                    sensor_data->angle,
+                    sensor_data->distance / 10.0,
+                    sensor_data->bumpLeft,
+                    sensor_data->bumpRight
             );
             sendUartString(uartTX);
+
+            if(sensor_data->cliffFrontLeftSignal > FLOOR_MAX ||
+                    sensor_data->cliffFrontLeftSignal < PIT_MAX ||
+                    sensor_data->cliffLeftSignal > FLOOR_MAX ||
+                    sensor_data->cliffLeftSignal < PIT_MAX ||
+                    sensor_data->cliffFrontRightSignal > FLOOR_MAX ||
+                    sensor_data->cliffFrontRightSignal < PIT_MAX ||
+                    sensor_data->cliffRightSignal > FLOOR_MAX ||
+                    sensor_data->cliffRightSignal < PIT_MAX) {
+                //Stop and make noise for half second
+                //                oi_setWheels(0, 0);
+                //                play_sound(2);
+                //                timer_waitMillis(500);
+                //                oi_setWheels(-50, -50);
+                //                timer_waitMillis(500);
+                //                oi_setWheels(0, 0);
+
+            }
+
         }
 
         oi_update(sensor_data);
@@ -86,73 +128,76 @@ void main() {
 
         switch ( uartRX )
         {
-            case 'w': // simple forward
+        case 'w': // simple forward
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(50, 50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                inAction = false;
+            } else
+            {
+                oi_setWheels(50, 50);
+                inAction = true;
             }
-            case 's': // simple back
+            break;
+        }
+        case 's': // simple back
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(-50, -50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                inAction = false;
+            } else
+            {
+                oi_setWheels(-50, -50);
+                inAction = true;
             }
-            case 'a': // simple left
+            break;
+        }
+        case 'a': // simple left
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(50, -50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                inAction = false;
+            } else
+            {
+                oi_setWheels(50, -50);
+                inAction = true;
             }
-            case 'd': // simple right
+            break;
+        }
+        case 'd': // simple right
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(-50, 50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                inAction = false;
+            } else
+            {
+                oi_setWheels(-50, 50);
+                inAction = true;
             }
-            case 'm': // scan
-            {
-                servo_move(90.0);
+            break;
+        }
+        case 'm': // scan
+        {
+            servo_move(90.0);
+            scanInfront(uartTX);
+            break;
+        }
+        case 'n': // scan
+        {
+            servo_move(0);
+            timer_waitMillis(750);
+            int i;
+            for ( i = 0; i < 180; i++) {
                 scanInfront(uartTX);
-                break;
+                servo_move(i);
+//                timer_waitMillis(40);
             }
-            case 'n': // scan
-            {
-                float i;
-                for ( i = 0.0; i < 180; i++) {
-                    scanInfront(uartTX);
-                    servo_move(i);
-                }
-                break;
-            }
+            break;
+        }
         }
     }
 }

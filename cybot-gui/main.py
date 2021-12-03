@@ -19,8 +19,13 @@ move_avg = [14]
 turn_avg = [70.12]
 ir_cal = [1043, 745, 610, 487, 2191, 1530, 1169, 945, 778, 672, 583, 528, 466, 406, 381, 330, 298, 268, 248, 225, 236, 235, 196, 235, 196, 168, 144, 166, 120]
 pg_cal = [16.12, 22.64, 27.04, 31.84, 7.79, 11.29, 14.86, 19.04, 23.14, 26.72, 28.85, 33.23, 36.98, 40.65, 44.12, 48.08, 51.49, 26.79, 33.26, 39.66, 66.9, 1000.0, 1000.0, 1000.0, 1000.0, 64.08, 8.82, 1000.0, 69.69]
-COEFF = 3082
-PWR = -0.748
+#COEFF = 3082
+#PWR = -0.748
+
+#Cybot 9
+COEFF = 67040.0548282411
+PWR = -1.0002365394867478
+
 IR_RAW = 0
 CliffData = []
 
@@ -37,7 +42,8 @@ def line_of_best_fit():
     global COEFF, PWR
     popt, _ = curve_fit(objective, ir_cal, pg_cal)
     COEFF, PWR = popt
-    print(COEFF, PWR)
+    print("COEFF: " + str(COEFF))
+    print("PWR: " + str(PWR))
 
 def ir_to_cm(val):
     """convert ir values into centimeters"""
@@ -113,7 +119,7 @@ class Player():
     def calibrate_ir(self):
         """calibrate ir sensor w/ ping sensor"""
         print("Calibrating IR sensors...")
-        while self.bumper == "":
+        while self.lBump == "" and self.rBump == "":
             cybot_uart.send_data('w')
             time.sleep(0.25)
             cybot_uart.send_data('w') # stop moving
@@ -125,13 +131,15 @@ class Player():
             time.sleep(0.25)
             cybot_uart.send_data('s')
             cybot_uart.send_data('m')
-            time.sleep(0.1)
+            time.sleep(0.5)
             if ScanData[len(ScanData) - 1].pg[0] >= 500: continue
             ir_cal.append(IR_RAW)
             pg_cal.append(ScanData[len(ScanData) - 1].pg[0])
         print("Complete!")
         print("Recommend: Restart client or clear scan data (k).")
-        self.calibrate_move_estimation()
+        
+        cybot_uart.send_data('s')
+        #self.calibrate_move_estimation()
 
     def forward(self):
         """move forward until not estimating"""
@@ -179,9 +187,25 @@ class Player():
         irx, iry = polar_to_cart(int(self.servo_pos) - 90 + self.rot, ir * CM_TO_PX)
         pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, pg * CM_TO_PX)
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
-        if ir < 100:
+        
+        if ir < 70:
+
+            ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
+
+            avg_x = (self.x+pgx+offsetx + self.x+irx+offsetx) / 2
+            avg_y = (self.y+pgy+offsety + self.y+iry+offsety) / 2
             #Add a new obstacle in the grid at calculated coordinates
-            obstacle_grid[self.x+pgx+offsetx][self.y+pgy+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety)
+            #obstacle_grid[self.x+pgx+offsetx][self.y+pgy+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety)
+            obstacle_grid[avg_x][avg_y] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety, avg_x, avg_y)
+
+            print(obstacle_grid)
+
+class Point():
+    """class to hold scan data"""
+
+    def __init__(self,irx,iry,pgx,pgy,ir,pg):
+        self.ir = [ir,[irx,iry]]
+        self.pg = [pg,[pgx,pgy]]
 
 class Obstacle():
     '''
@@ -194,14 +218,31 @@ class Obstacle():
         self.iy = iy
         self.px = px
         self.py = py
+        self.points = PointCloud()
     def __str__(self):
-        return "Obstacle(" + str(self.px) + ", " + str(self.py) + ")"
+        return "Obstacle(" + str(self.px) + ", " + str(self.py) + ", irx: " + str(self.ix) + ", iry: " + str(self.iy) + ")"
 
     def __repr__(self):
         return self.__str__()
 
 
-class Grid(list):
+class PointCloud(list):
+    
+    def __init__(self):
+        super().__init__(self)
+        self.least_point = None
+        self.most_point = None
+
+    def append(self, item):
+        super().append(item)
+        if self.least_point == None or (item[0] < self.least_point[0] and item[1] < self.least_point[1]):
+            self.least_point = item
+
+        if self.most_point == None or (item[0] > self.most_point[0] and item[1] > self.most_point[1]):
+            self.most_point = item
+
+
+class Grid():
     '''
     Class for transparently working on the grid.
 
@@ -211,7 +252,7 @@ class Grid(list):
     '''
 
     def __init__(self, near_threshold=5, outer=True, container=None):
-        super().__init__(self)
+        #super().__init__(self)
         self.grid_dict = {}
         self.near_threshold = near_threshold
         self.outer = outer
@@ -230,18 +271,20 @@ class Grid(list):
         self.grid_dict = {}
 
     def __getitem__(self, key):
+        key = int(key)
         try:
             return self.grid_dict[key]
         except KeyError:
             if(self.outer):
-                self.grid_dict[key] = Grid(outer=False, container = self)
+                self.grid_dict[key] = Grid(near_threshold=self.near_threshold,outer=False, container = self)
                 return self.grid_dict[key]
             return None
 
     def __setitem__(self, key, newval):
+        #print("Setting item, self.outer=" + str(self.outer))
         if(not self.outer):
-            x = newval.px
-            y = newval.py
+            x = int(newval.px)
+            y = int(newval.py)
             for i in range(int(x - self.near_threshold), int(x + self.near_threshold)):
                 for j in range(int(y - self.near_threshold), int(y + self.near_threshold)):
                     if self.container[i][j] != None:
@@ -249,7 +292,13 @@ class Grid(list):
                         return
 
             #If no near obstacle found, add to grid
-            self.grid_dict[key] = newval
+            self.grid_dict[int(key)] = newval
+    
+    def __str__(self):
+        return str(self.grid_dict)
+
+    def __repr__(self):
+        return self.__str__()
 
 class Cliff():
     """class to hold cliff data"""
@@ -339,7 +388,7 @@ pygame.init()
 font = pygame.font.SysFont('Segoe UI', 30)
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 ScanData = []
-obstacle_grid = Grid()
+obstacle_grid = Grid(near_threshold=40)
 
 try:
     cybot_uart = uart.UartConnection()
@@ -348,6 +397,7 @@ try:
     stream.daemon = True
     stream.start()
 except serial.serialutil.SerialException:
+    print("No serial connection found")
     sys.exit()
 
 #PLEASE PUT IN A MAIN FUNCTION LIKE ABOVE
@@ -380,6 +430,7 @@ while running:
                 line_of_best_fit()
             if event.key == ord('k'): # clear scan data
                 ScanData.clear()
+                obstacle_grid.clear()
             if event.key == ord('r'): # reset cybot location
                 pass
         elif event.type == pygame.KEYUP:
@@ -408,7 +459,14 @@ while running:
     screen.blit(mode_text,(0,0))
 
     for obstacle in obstacle_grid.get_obstacles():
-            pygame.draw.circle(screen, RED, [obstacle.px, obstacle.py], 1)
-            print(obstacle)
+            if(obstacle.points.least_point == None or obstacle.points.most_point == None):
+                continue
+            x2 = obstacle.points.most_point[0]
+            x1 = obstacle.points.least_point[0]
+            y2 = obstacle.points.most_point[1]
+            y1 = obstacle.points.least_point[1]
+            pygame.draw.circle(screen, RED, [obstacle.px, obstacle.py], math.hypot(x2 - x1, y2 - y1) / 2)
+    
+   # print(str(obstacle_grid) + "\n")
 
     pygame.display.flip()
