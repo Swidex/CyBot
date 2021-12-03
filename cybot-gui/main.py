@@ -188,12 +188,16 @@ class Player():
         pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, pg * CM_TO_PX)
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
         
-        if ir < 70:
+        if ir < 60:
 
             ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
 
             avg_x = (self.x+pgx+offsetx + self.x+irx+offsetx) / 2
             avg_y = (self.y+pgy+offsety + self.y+iry+offsety) / 2
+
+            #avg_x = self.x+irx+offsetx
+            #avg_y = self.y+iry+offsety
+
             #Add a new obstacle in the grid at calculated coordinates
             #obstacle_grid[self.x+pgx+offsetx][self.y+pgy+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety)
             obstacle_grid[avg_x][avg_y] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety, avg_x, avg_y)
@@ -218,7 +222,7 @@ class Obstacle():
         self.iy = iy
         self.px = px
         self.py = py
-        self.points = PointCloud()
+        self.points = PointCloud((px, py))
     def __str__(self):
         return "Obstacle(" + str(self.px) + ", " + str(self.py) + ", irx: " + str(self.ix) + ", iry: " + str(self.iy) + ")"
 
@@ -228,13 +232,26 @@ class Obstacle():
 
 class PointCloud(list):
     
-    def __init__(self):
+    def __init__(self, center):
         super().__init__(self)
         self.least_point = None
         self.most_point = None
+        self.center = center
 
     def append(self, item):
+        distance = math.hypot(item[0] - self.center[0], item[1] - self.center[1])
+
+        #Abnormal outlier, throw out
+        if(abs(distance) > 25):
+            return
+
         super().append(item)
+
+        #Update centerpoint
+        x = [p[0] for p in self]
+        y = [p[1] for p in self]
+        self.center = (sum(x) / len(self), sum(y) / len(self))
+
         if self.least_point == None or (item[0] < self.least_point[0] and item[1] < self.least_point[1]):
             self.least_point = item
 
@@ -388,7 +405,7 @@ pygame.init()
 font = pygame.font.SysFont('Segoe UI', 30)
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 ScanData = []
-obstacle_grid = Grid(near_threshold=40)
+obstacle_grid = Grid(near_threshold=28)
 
 try:
     cybot_uart = uart.UartConnection()
@@ -465,7 +482,7 @@ while running:
             x1 = obstacle.points.least_point[0]
             y2 = obstacle.points.most_point[1]
             y1 = obstacle.points.least_point[1]
-            pygame.draw.circle(screen, RED, [obstacle.px, obstacle.py], math.hypot(x2 - x1, y2 - y1) / 2)
+            pygame.draw.circle(screen, RED, obstacle.points.center, math.hypot(x2 - x1, y2 - y1) / 2)
     
    # print(str(obstacle_grid) + "\n")
 
