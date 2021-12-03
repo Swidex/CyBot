@@ -12,8 +12,8 @@ RED = (200, 25, 25)
 GREEN = (25, 200, 25)
 
 CM_TO_PX = 1.724
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
 
 move_avg = [14]
 turn_avg = [70.12]
@@ -70,7 +70,7 @@ class Player():
         self.rBump = ""
         self.estimating = False
 
-    def update(self, angle, dist, lBump, rBump):
+    def position(self, angle, dist):
         """update position info"""
         self.rot += angle
 
@@ -80,16 +80,27 @@ class Player():
         self.y += y
         self.rect = pygame.Rect(self.x-(self.size/2),self.y-(self.size/2),self.size,self.size)
 
-        # bumper handling
-        self.lBump = "l" if lBump == 1 else ""
-        self.rBump = "r" if rBump == 1 else ""
+
+    def bump(self, leftBump, rightBump):
+        """update bumper status on gui and draw"""
+        if leftBump == 1:
+            x, y = polar_to_cart(self.rot + 45, self.size / 1.5)
+            self.lBump = "left "
+            CliffData.append(Cliff(True, self.x + x, self.y + y, self.x, self.y))
+        else: self.lBump = ""
+
+        if rightBump == 1:
+            x, y = polar_to_cart(self.rot - 45, self.size / 1.5)
+            self.rBump = "right "
+            CliffData.append(Cliff(True, self.x + x, self.y + y, self.x, self.y))
+        else: self.rBump = ""
 
     def cliff(self, cliffVal) :
         # cliff handling
-        lx, ly = polar_to_cart(self.rot - 45, self.size / 1.5)
-        flx, fly = polar_to_cart(self.rot - 15, self.size / 1.5)
-        rx, ry = polar_to_cart(self.rot + 45, self.size / 1.5)
-        frx, fry = polar_to_cart(self.rot + 15, self.size / 1.5)
+        lx, ly = polar_to_cart(self.rot + 45, self.size / 1.5)
+        flx, fly = polar_to_cart(self.rot + 15, self.size / 1.5)
+        rx, ry = polar_to_cart(self.rot - 45, self.size / 1.5)
+        frx, fry = polar_to_cart(self.rot - 15, self.size / 1.5)
 
         if cliffVal & 0b1:
             # l high
