@@ -37,7 +37,6 @@ def line_of_best_fit():
     global COEFF, PWR
     popt, _ = curve_fit(objective, ir_cal, pg_cal)
     COEFF, PWR = popt
-    print(COEFF, PWR)
 
 def ir_to_cm(val):
     """convert ir values into centimeters"""
@@ -179,7 +178,9 @@ class Player():
         irx, iry = polar_to_cart(int(self.servo_pos) - 90 + self.rot, ir * CM_TO_PX)
         pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, pg * CM_TO_PX)
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
-        if ir < 100:
+        
+        if IR_RAW > 500:
+
             #Add a new obstacle in the grid at calculated coordinates
             obstacle_grid[self.x+pgx+offsetx][self.y+pgy+offsety] = Obstacle(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety)
 
@@ -194,14 +195,15 @@ class Obstacle():
         self.iy = iy
         self.px = px
         self.py = py
+        self.points = []
     def __str__(self):
-        return "Obstacle(" + str(self.px) + ", " + str(self.py) + ")"
+        return "Obstacle(" + str(self.px) + ", " + str(self.py) + ", irx: " + str(self.ix) + ", iry: " + str(self.iy) + ")"
 
     def __repr__(self):
         return self.__str__()
 
 
-class Grid(list):
+class Grid():
     '''
     Class for transparently working on the grid.
 
@@ -211,7 +213,7 @@ class Grid(list):
     '''
 
     def __init__(self, near_threshold=5, outer=True, container=None):
-        super().__init__(self)
+        #super().__init__(self)
         self.grid_dict = {}
         self.near_threshold = near_threshold
         self.outer = outer
@@ -230,26 +232,35 @@ class Grid(list):
         self.grid_dict = {}
 
     def __getitem__(self, key):
+        key = int(key)
         try:
             return self.grid_dict[key]
         except KeyError:
             if(self.outer):
-                self.grid_dict[key] = Grid(outer=False, container = self)
+                self.grid_dict[key] = Grid(near_threshold=self.near_threshold,outer=False, container = self)
                 return self.grid_dict[key]
             return None
 
     def __setitem__(self, key, newval):
+        #print("Setting item, self.outer=" + str(self.outer))
         if(not self.outer):
-            x = newval.px
-            y = newval.py
+            x = int(newval.px)
+            y = int(newval.py)
             for i in range(int(x - self.near_threshold), int(x + self.near_threshold)):
                 for j in range(int(y - self.near_threshold), int(y + self.near_threshold)):
                     if self.container[i][j] != None:
+                        print("Found near obstacle")
                         self.container[i][j].points.append((newval.px, newval.py))
                         return
 
             #If no near obstacle found, add to grid
-            self.grid_dict[key] = newval
+            self.grid_dict[int(key)] = newval
+    
+    def __str__(self):
+        return str(self.grid_dict)
+
+    def __repr__(self):
+        return self.__str__()
 
 class Cliff():
     """class to hold cliff data"""
@@ -339,7 +350,7 @@ pygame.init()
 font = pygame.font.SysFont('Segoe UI', 30)
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 ScanData = []
-obstacle_grid = Grid()
+obstacle_grid = Grid(near_threshold=5)
 
 try:
     cybot_uart = uart.UartConnection()
@@ -410,6 +421,7 @@ while running:
 
     for obstacle in obstacle_grid.get_obstacles():
             pygame.draw.circle(screen, RED, [obstacle.px, obstacle.py], 1)
-            print(obstacle)
+    
+   # print(str(obstacle_grid) + "\n")
 
     pygame.display.flip()
