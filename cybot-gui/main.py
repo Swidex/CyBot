@@ -1,6 +1,7 @@
 import serial.serialutil
 import pygame, math, sys, uart, serial, threading, time, numpy
 from scipy.optimize import curve_fit
+from statistics import pstdev
 
 # Constants
 BLUE = (25, 25, 200)
@@ -22,9 +23,15 @@ pg_cal = [16.12, 22.64, 27.04, 31.84, 7.79, 11.29, 14.86, 19.04, 23.14, 26.72, 2
 #COEFF = 3082
 #PWR = -0.748
 
-#Cybot 9
-COEFF = 67040.0548282411
-PWR = -1.0002365394867478
+configs = {
+    3: {'COEFF':  67040.0548282411, 'PWR': -1.0002365394867478},
+    9: {'COEFF': 86338.93790129754, 'PWR': -1.0514768371387075}
+}
+
+CYBOT_NUM = 3
+COEFF = configs[CYBOT_NUM]['COEFF']
+PWR = configs[CYBOT_NUM]['PWR']
+
 
 IR_RAW = 0
 CliffData = []
@@ -42,8 +49,8 @@ def line_of_best_fit():
     global COEFF, PWR
     popt, _ = curve_fit(objective, ir_cal, pg_cal)
     COEFF, PWR = popt
-    print("COEFF: " + str(COEFF))
-    print("PWR: " + str(PWR))
+    print("COEFF = " + str(COEFF))
+    print("PWR = " + str(PWR))
 
 def ir_to_cm(val):
     """convert ir values into centimeters"""
@@ -86,13 +93,13 @@ class Player():
         if leftBump == 1:
             x, y = polar_to_cart(self.rot + 45, self.size / 1.5)
             self.lBump = "left "
-            CliffData.append(Cliff(True, self.x + x, self.y + y, self.x, self.y))
+            CliffData.append(Cliff(False, self.x + x, self.y + y, self.x, self.y, bump=True))
         else: self.lBump = ""
 
         if rightBump == 1:
             x, y = polar_to_cart(self.rot - 45, self.size / 1.5)
             self.rBump = "right "
-            CliffData.append(Cliff(True, self.x + x, self.y + y, self.x, self.y))
+            CliffData.append(Cliff(False, self.x + x, self.y + y, self.x, self.y, bump=True))
         else: self.rBump = ""
 
     def cliff(self, cliffVal) :
@@ -104,28 +111,28 @@ class Player():
 
         if cliffVal & 0b1:
             # l high
-            CliffData.append(Cliff(True,self.x + lx,self.y + ly,self.x,self.y))
+            CliffData.append(Cliff(False,self.x + lx,self.y + ly,self.x,self.y))
         if cliffVal & 0b10:
             # l low
-            CliffData.append(Cliff(False,self.x + lx,self.y + ly,self.x,self.y))
+            CliffData.append(Cliff(True,self.x + lx,self.y + ly,self.x,self.y))
         if cliffVal >> 2 & 0b1:
             # lf high
-            CliffData.append(Cliff(True,self.x + flx,self.y + fly,self.x,self.y))
+            CliffData.append(Cliff(False,self.x + flx,self.y + fly,self.x,self.y))
         if cliffVal >> 2 & 0b10:
             # lf low
-            CliffData.append(Cliff(False,self.x + flx,self.y + fly,self.x,self.y))
+            CliffData.append(Cliff(True,self.x + flx,self.y + fly,self.x,self.y))
         if cliffVal >> 4 & 0b1:
             # r high
-            CliffData.append(Cliff(True,self.x + rx,self.y + ry,self.x,self.y))
+            CliffData.append(Cliff(False,self.x + rx,self.y + ry,self.x,self.y))
         if cliffVal >> 4 & 0b10:
             # r low
-            CliffData.append(Cliff(False,self.x + rx,self.y + ry,self.x,self.y))
+            CliffData.append(Cliff(True,self.x + rx,self.y + ry,self.x,self.y))
         if cliffVal >> 8 & 0b1:
             # rf high
-            CliffData.append(Cliff(True,self.x + frx,self.y + fry,self.x,self.y))
+            CliffData.append(Cliff(False,self.x + frx,self.y + fry,self.x,self.y))
         if cliffVal >> 8 & 0b10:
             # rf low
-            CliffData.append(Cliff(False,self.x + frx,self.y + fry,self.x,self.y))
+            CliffData.append(Cliff(True,self.x + frx,self.y + fry,self.x,self.y))
 
     def calibrate_ir(self):
         """calibrate ir sensor w/ ping sensor"""
@@ -148,9 +155,6 @@ class Player():
             pg_cal.append(ScanData[len(ScanData) - 1].pg[0])
         print("Complete!")
         print("Recommend: Restart client or clear scan data (k).")
-        
-        cybot_uart.send_data('s')
-        #self.calibrate_move_estimation()
 
     def forward(self):
         """move forward until not estimating"""
@@ -199,7 +203,7 @@ class Player():
         pgx, pgy = polar_to_cart(int(self.servo_pos) - 90 + self.rot, pg * CM_TO_PX)
         offsetx, offsety = polar_to_cart(self.rot, float(34.8 / 2) * CM_TO_PX)
         
-        if ir < 60:
+        if ir < 65:
 
             ScanData.append(Point(self.x+irx+offsetx, self.y+iry+offsety, self.x+pgx+offsetx, self.y+pgy+offsety,ir,pg))
 
@@ -252,16 +256,29 @@ class PointCloud(list):
     def append(self, item):
         distance = math.hypot(item[0] - self.center[0], item[1] - self.center[1])
 
-        #Abnormal outlier, throw out
-        if(abs(distance) > 25):
-            return
+        if(len(self) > 1):
+
+            x_stdev = pstdev([a[0] for a in self])
+            y_stdev = pstdev([a[1] for a in self])
+
+            if(x_stdev != 0 and y_stdev != 0):
+
+                x_score = (item[0] - self.center[0]) / x_stdev # x
+                y_score = (item[1] - self.center[1]) / y_stdev # 
+                #Abnormal outlier, throw out
+                #if(abs(distance) > 25):
+                #    return
+                print(x_score)
+                print(y_score)
+                if(x_score > 8 or y_score > 8):
+                    return
 
         super().append(item)
 
         #Update centerpoint
         x = [p[0] for p in self]
         y = [p[1] for p in self]
-        self.center = (sum(x) / len(self), sum(y) / len(self))
+        self.center = (sum(x) / len(self), sum(y) / len(self)) #mew char
 
         if self.least_point == None or (item[0] < self.least_point[0] and item[1] < self.least_point[1]):
             self.least_point = item
@@ -331,12 +348,14 @@ class Grid():
 class Cliff():
     """class to hold cliff data"""
 
-    def __init__(self,cliff,x,y,dX,dY):
+    def __init__(self,cliff,x,y,dX,dY, bump=False):
         #TODO: add pit visualization to gui
         if cliff:
             self.color = BLACK
-        else:
+        elif not bump:
             self.color = WHITE
+        else:
+            self.color = GREEN
 
         self.x = x
         self.y = y
@@ -414,9 +433,9 @@ def main():
 # initalize pygame
 pygame.init()
 font = pygame.font.SysFont('Segoe UI', 30)
-screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((1920, 1080), pygame.RESIZABLE)
 ScanData = []
-obstacle_grid = Grid(near_threshold=28)
+obstacle_grid = Grid(near_threshold=31)
 
 try:
     cybot_uart = uart.UartConnection()
@@ -429,6 +448,7 @@ except serial.serialutil.SerialException:
     sys.exit()
 
 #PLEASE PUT IN A MAIN FUNCTION LIKE ABOVE
+fast_mode = False
 running = True
 while running:
     for event in pygame.event.get():
@@ -461,6 +481,9 @@ while running:
                 obstacle_grid.clear()
             if event.key == ord('r'): # reset cybot location
                 pass
+            if(event.key == ord('p')): # toggle speed mode
+                cybot_uart.send_data("p")
+                fast_mode = not fast_mode
         elif event.type == pygame.KEYUP:
             player.estimating = False
 
@@ -485,6 +508,12 @@ while running:
     else:
         mode_text = font.render("mode: auto", False, WHITE)
     screen.blit(mode_text,(0,0))
+
+    if(fast_mode):
+        fast_text = font.render("speed: 150", False, WHITE)
+    else:
+        fast_text = font.render("speed: 50", False, WHITE)
+    screen.blit(fast_text, (0, 160))
 
     for obstacle in obstacle_grid.get_obstacles():
             if(obstacle.points.least_point == None or obstacle.points.most_point == None):
