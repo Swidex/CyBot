@@ -20,4 +20,6 @@ void servo_init(void);
 
 void servo_move(float degrees);
 
+void servo_set_calibration(float correction, float coefficient);
+
 #endif /* SERVO_H_ */

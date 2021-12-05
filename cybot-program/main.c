@@ -13,20 +13,27 @@
 #include "Sound.h"
 #include "cliff.h"
 
-#define CYBOT_9
+#define CYBOT_3
 
 #ifdef CYBOT_3
     #define PING_MOD 969.33
-    #define PIT_MAX 500
-    #define FLOOR_MAX 2500
+    #define SERVO_CALIBRATION -30
+    #define SERVO_COEFFICIENT 1.17
+    #define CLIFF_MIN 750
+    #define CLIFF_MAX 2500
 #endif
 
 #ifdef CYBOT_9
     #define PING_MOD 969.33
-    #define PIT_MAX 1000
-    #define FLOOR_MAX 2800
+    #define SERVO_CALIBRATION -18
+
+    #define CLIFF_MIN 1000
+    #define CLIFF_MAX 2700
 #endif
 
+extern volatile bool inAction;
+bool isFast = false;
+int speed = 50;
 
 void scanInfront(char* uartTX)
 {
@@ -63,7 +70,7 @@ void calibrateMotors(oi_t *sensor) {
     rightEncoderVal -= sensor->rightEncoderCount;
 
     printf("%f %f", 1.0, (leftEncoderVal / rightEncoderVal));
-    oi_setMotorCalibration(1.0, (float) (leftEncoderVal / rightEncoderVal) );
+    oi_setMotorCalibration(1.0,  (((float) leftEncoderVal) / rightEncoderVal) );
 }
 
 void main() {
@@ -77,6 +84,8 @@ void main() {
     adc_init();
     ping_init();
     servo_init();
+    servo_set_calibration(SERVO_CALIBRATION, SERVO_COEFFICIENT);
+    cliff_set_calibration(CLIFF_MIN, CLIFF_MAX);
     servo_move(90.0);
 
     oi_t *sensor_data = oi_alloc();
@@ -84,7 +93,7 @@ void main() {
 
     unsigned int lastCliffData = 0b00000000;
 
-    bool inAction = false;
+    //bool inAction = false;
     char uartRX;                // var to hold uart RX data
     char uartTX[50] = "";       // string to hold uart TX data
 
@@ -149,76 +158,86 @@ void main() {
 
         switch ( uartRX )
         {
-            case 'w': // simple forward
+        case 'w': // simple forward
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(50, 50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                //inAction = false;
+            } else
+            {
+                oi_setWheels(speed, speed);
+                //inAction = true;
             }
-            case 's': // simple back
+            break;
+        }
+        case 's': // simple back
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(-50, -50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                //inAction = false;
+            } else
+            {
+                oi_setWheels(-speed, -speed);
+                //inAction = true;
             }
-            case 'a': // simple left
+            break;
+        }
+        case 'a': // simple left
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(50, -50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                //inAction = false;
+            } else
+            {
+                oi_setWheels(speed, -speed);
+                //inAction = true;
             }
-            case 'd': // simple right
+            break;
+        }
+        case 'd': // simple right
+        {
+            if (inAction)
             {
-                if (inAction)
-                {
-                    oi_setWheels(0, 0);
-                    inAction = false;
-                } else
-                {
-                    oi_setWheels(-50, 50);
-                    inAction = true;
-                }
-                break;
+                oi_setWheels(0, 0);
+                //inAction = false;
+            } else
+            {
+                oi_setWheels(-speed, speed);
+                //inAction = true;
             }
-            case 'm': // scan
-            {
-                servo_move(90.0);
+            break;
+        }
+        case 'm': // scan
+        {
+            servo_move(90.0);
+            scanInfront(uartTX);
+            break;
+        }
+        case 'n': // scan
+        {
+            servo_move(0);
+            timer_waitMillis(750);
+            int i;
+            for ( i = 0; i < 180; i++) {
                 scanInfront(uartTX);
-                break;
+                servo_move(i);
+                //timer_waitMillis(40);
             }
-            case 'n': // scan
-            {
-                servo_move(0);
-                timer_waitMillis(750);
-                int i;
-                for ( i = 0; i < 180; i++) {
-                    scanInfront(uartTX);
-                    servo_move(i);
-                    //timer_waitMillis(40);
-                }
-                break;
+            break;
+        }
+        case 'p': // change speed
+        {
+            isFast = !isFast;
+            if(isFast) {
+                speed = 150;
+            } else {
+                speed = 50;
             }
+            break;
+        }
         }
     }
 }
