@@ -7,4 +7,6 @@
 
 unsigned int updateCliffStatus(oi_t *sensor);
 
+void cliff_set_calibration(int min, int max);
+
 #endif

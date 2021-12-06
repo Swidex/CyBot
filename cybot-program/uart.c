@@ -6,6 +6,7 @@
 #include <math.h>
 #include "timer.h"
 
+extern volatile bool inAction = true;
 extern volatile char receive_data = '\0';
 
 // Initialize the UART to communciate between CyBot and PuTTy
@@ -52,6 +53,10 @@ void uart_handler() {
         char data = (char) (UART1_DR_R & 0xFF);
         if (data >= 128) { data -= 128; } // detect if character is ASCII
         receive_data = data;
+
+        if(data == 'w' || data == 'a' || data == 's' || data == 'd') {
+            inAction = !inAction;
+        }
 
         UART1_ICR_R |= 0b10000; // clear interrupt
     } else if (UART1_MIS_R & 0b100000) {

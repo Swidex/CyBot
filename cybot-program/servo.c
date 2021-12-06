@@ -1,6 +1,8 @@
 #include "servo.h"
 
 volatile float servo_pos;
+float servo_correction = 0;
+float servo_coefficient = 1;
 
 void servo_init()
 {
@@ -52,6 +54,11 @@ void servo_init()
 void servo_move(float degrees)
 {
     servo_pos = degrees;
+
+    //Correct requested for calibration
+    degrees += servo_correction;
+    degrees *= servo_coefficient;
+
     //    TIMER1_CTL_R &= ~0x100;                  // disable TIMER1B
     //
     //    int match_value = ( (0.0095*(degrees) + .5) / 0.0000625);
@@ -69,4 +76,9 @@ void servo_move(float degrees)
     TIMER1_TBMATCHR_R = cycles & 0xFFFF;
     TIMER1_TBPMR_R = cycles >> 16;
     TIMER1_CTL_R |= 0x100; // re-enable timer b
+}
+
+void servo_set_calibration(float correction, float coefficient) {
+    servo_correction = correction;
+    servo_coefficient = coefficient;
 }
