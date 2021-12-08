@@ -191,7 +191,6 @@ class Player():
         self.rect = pygame.Rect(self.x-30,self.y-30,60,60)
         ScanData.clear()
 
-
     def scan(self,theta,ir,pg):
         """scan 180 degrees infront"""
         global IR_RAW
@@ -397,7 +396,7 @@ def main():
                 if event.key == ord('k'): # clear scan data
                     ScanData.clear()
                 if event.key == ord('r'): # reset cybot location
-                    pass
+                    cybot_uart.send_data("r")
             elif event.type == pygame.KEYUP:
                 player.estimating = False
 
